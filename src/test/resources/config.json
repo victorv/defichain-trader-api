@@ -1,0 +1,21 @@
+{
+  "production": false,
+  "host": "127.0.0.1",
+  "port": 5555,
+  "accountsRoot": "",
+  "webappRoot": "",
+  "telegramBot": {
+    "secret": "",
+    "url": "https://api.telegram.org"
+  },
+  "rpc": {
+    "host": "127.0.0.1",
+    "port": 8332,
+    "user": "k3i43fiefe93",
+    "password": "egm39rgerinjenge"
+  },
+  "zmq": {
+    "host": "127.0.0.1",
+    "port": 29500
+  }
+}

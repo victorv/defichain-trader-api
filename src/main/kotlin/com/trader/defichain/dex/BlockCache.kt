@@ -1,0 +1,322 @@
+package com.trader.defichain.dex
+
+import com.trader.defichain.http.gzip
+import com.trader.defichain.rpc.RPC
+import com.trader.defichain.rpc.RPC.Companion.listPrices
+import com.trader.defichain.rpc.Token
+import com.trader.defichain.zmq.newZQMBlockChannel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import java.math.BigDecimal
+import java.nio.charset.StandardCharsets
+import kotlin.coroutines.CoroutineContext
+
+private var tokensByID = mapOf<String, Token>()
+private var tokenIdsFromPoolsBySymbol = mapOf<String, String>()
+private var tokensCached = "{}".toByteArray(StandardCharsets.UTF_8)
+private var poolPairsSignature = ""
+private var poolPairs = mapOf<String, PoolPair>()
+private var poolPairsCached = "{}".toByteArray(StandardCharsets.UTF_8)
+private var swapPaths = mutableMapOf<String, List<List<String>>>()
+fun getCachedPoolPairs() = poolPairsCached
+
+fun getCachedTokens() = tokensCached
+
+fun getTokensByID() = HashMap(tokensByID)
+
+fun getSwapPaths(poolSwap: AbstractPoolSwap) =
+    swapPaths.getOrDefault("${poolSwap.tokenFrom} to ${poolSwap.tokenTo}", emptyList())
+
+fun getTokenSymbol(tokenId: String): String {
+    val token = tokensByID[tokenId] ?: return tokenId
+    return token.symbol
+}
+
+fun getTokenId(tokenSymbol: String): String? = tokenIdsFromPoolsBySymbol[tokenSymbol]
+
+fun getPool(poolId: String) = poolPairs.getValue(poolId)
+
+fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
+    var poolsForAllSwaps = mutableMapOf<String, PoolPair>()
+    val swapResults = ArrayList<SwapResult>()
+
+    for (poolSwap in poolSwaps) {
+        var oraclePriceA = getOraclePriceForSymbol(poolSwap.tokenFrom)
+        var oraclePriceB = getOraclePriceForSymbol(poolSwap.tokenTo)
+        var oraclePrice: Double? = null
+        if (oraclePriceA != null && oraclePriceB != null) {
+            oraclePrice = oraclePriceB / oraclePriceA
+        }
+
+        val allPathsExplained = mutableListOf<PathBreakdown>()
+
+        val paths = getSwapPaths(poolSwap)
+        var bestResult = BigDecimal(0)
+        var poolsAfterBestSwap = poolsForAllSwaps
+        for (path in paths) {
+            val poolsForSwap = poolsForAllSwaps.map {
+                it.key to it.value.copy(
+                    reserveA = it.value.reserveA,
+                    reserveB = it.value.reserveB,
+                )
+            }.toMap().toMutableMap()
+
+            val pathExplained = mutableListOf<PoolSwapExplained>()
+
+            var tokenFrom = poolSwap.tokenFrom
+            var amountFrom = BigDecimal(poolSwap.amountFrom)
+            for (poolId in path) {
+                if (!poolsForSwap.containsKey(poolId)) {
+                    val pool = getPool(poolId)
+                    poolsForSwap[poolId] = pool.copy(
+                        reserveA = pool.reserveA,
+                        reserveB = pool.reserveB,
+                    )
+                }
+                val pool = poolsForSwap.getValue(poolId)
+
+                val (symbolA, symbolB) = pool.symbol.split("-")
+                val (explanation, result) = pool.swap(tokenFrom, amountFrom)
+
+                pathExplained.add(explanation)
+                amountFrom = result
+                tokenFrom = if (symbolA == tokenFrom) symbolB else symbolA
+            }
+
+            if (amountFrom > bestResult) {
+                bestResult = amountFrom
+                poolsAfterBestSwap = poolsForSwap
+            }
+
+            val estimate = pathExplained.last().amountTo
+
+            val price = if (estimate == 0.0) null else poolSwap.amountFrom / estimate
+            val premium = if (oraclePrice == null || price == null) null else 100.0 / oraclePrice * price - 100.0
+            allPathsExplained.add(
+                PathBreakdown(
+                    price = price,
+                    premium = premium,
+                    overflow = estimate < 0.0,
+                    status = pathExplained.all { it.status },
+                    tradeEnabled = pathExplained.all { it.tradeEnabled },
+                    swaps = pathExplained,
+                    estimate = estimate,
+                )
+            )
+        }
+        poolsForAllSwaps = poolsAfterBestSwap
+
+        val bestEstimate =
+            allPathsExplained.firstOrNull { it.status && it.tradeEnabled && !it.overflow }?.estimate ?: 0.0
+        val desiredResult = poolSwap.desiredResult!!
+        val maxPrice = poolSwap.amountFrom / desiredResult
+        val pathsBestToWorst =
+            allPathsExplained.sortedByDescending { if (it.isBad()) -1.0 * it.estimate else it.estimate }
+        val swapResult = SwapResult(
+            estimate = bestEstimate,
+            desiredResult = poolSwap.desiredResult,
+            maxPrice = maxPrice,
+            oraclePrice = oraclePrice,
+            amountFrom = poolSwap.amountFrom,
+            tokenFrom = poolSwap.tokenFrom,
+            tokenTo = poolSwap.tokenTo,
+            breakdown = pathsBestToWorst,
+        )
+        swapResults.add(swapResult)
+    }
+
+    val poolResults = poolsForAllSwaps.values
+        .map {
+            val priceBefore = it.getPriceInfo(it.initialReserveA, it.initialReserveB)
+            val priceAfter = it.getPriceInfo(it.modifiedReserveA, it.modifiedReserveB)
+            val priceChange = it.getPriceChange(priceBefore, priceAfter)
+
+            PoolResult(
+                tokenA = getTokenSymbol(it.idTokenA),
+                tokenB = getTokenSymbol(it.idTokenB),
+                priceBefore = priceBefore,
+                priceAfter = priceAfter,
+                priceChange = priceChange,
+            )
+        }
+
+    return DexResult(
+        swapResults = swapResults,
+        poolResults = poolResults
+    )
+}
+
+suspend fun cachePoolPairs(coroutineContext: CoroutineContext) {
+    val blockChannel = newZQMBlockChannel()
+    while (coroutineContext.isActive) {
+        blockChannel.receive()
+        try {
+            cachePoolPairs()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        } finally {
+            delay(100)
+        }
+    }
+}
+
+private fun isTradeable(token: Token) = token.destructionHeight == -1 && token.tradeable
+suspend fun cachePoolPairs() {
+    val allPools = RPC.listPoolPairs()
+
+    val signature = allPools.keys.sorted().joinToString(",")
+    val isNewSignature = signature != poolPairsSignature
+    if (isNewSignature) {
+        cacheAllTokensById()
+        poolPairsSignature = signature
+    }
+
+    val latestPools = filterPools(allPools)
+    if (latestPools == poolPairs) {
+        return
+    }
+
+    if (isNewSignature) {
+        cachePoolTokensBySymbol(tokensByID, latestPools.values)
+        cacheSwapPaths(latestPools, tokenIdsFromPoolsBySymbol)
+    }
+
+    poolPairs = latestPools
+    poolPairsCached = gzip(poolPairs)
+
+    assignOraclePrices()
+}
+
+fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
+    val tokenId = tokenIdsFromPoolsBySymbol[tokenSymbol] ?: null
+    val token = tokensByID[tokenId] ?: return null
+    return token.oraclePrice
+}
+
+private suspend fun assignOraclePrices() {
+    tokensByID.forEach { it.value.oraclePrice = null }
+    val oraclePrices = listPrices().filter { it.ok.content == "true" && it.currency == "USD" }
+    for (oraclePrice in oraclePrices) {
+        val tokenId = tokenIdsFromPoolsBySymbol[oraclePrice.token] ?: continue
+        val token = tokensByID[tokenId] ?: continue
+        val oraclePrice = oraclePrice.price ?: continue
+        if (oraclePrice > 0.0) {
+            token.oraclePrice = oraclePrice
+        }
+    }
+
+    val dusdToken = tokensByID["15"] ?: return
+    dusdToken.oraclePrice = 1.0
+}
+
+private fun filterPools(allPoolPairs: Map<String, PoolPair>): Map<String, PoolPair> {
+    val latestPoolPairs = allPoolPairs.filter {
+        val poolPair = it.value
+
+        val poolPairToken = tokensByID.getValue(it.key)
+        if (!isTradeable(poolPairToken)) {
+            check(poolPairToken.symbol == poolPair.symbol)
+            return@filter false
+        }
+
+        val (tokenASymbol, tokenBSymbol) = poolPair.symbol.split("-")
+
+        val tokenA = tokensByID.getValue(poolPair.idTokenA)
+        if (!isTradeable(tokenA)) {
+            check(tokenA.symbol == tokenASymbol)
+            return@filter false
+        }
+
+        val tokenB = tokensByID.getValue(poolPair.idTokenB)
+        if (!isTradeable(tokenB)) {
+            check(tokenB.symbol == tokenBSymbol)
+            return@filter false
+        }
+
+        tokenASymbol != "BURN" && tokenBSymbol != "BURN"
+    }
+    return latestPoolPairs
+}
+
+private fun cacheSwapPaths(pools: Map<String, PoolPair>, tokenIdsFromPoolsBySymbol: Map<String, String>) {
+    val poolTree = PoolTree()
+    val tokenIds = mutableSetOf<String>()
+    for ((poolId, pool) in pools) {
+        tokenIds.add(pool.idTokenA)
+        tokenIds.add(pool.idTokenB)
+        poolTree.addPool(poolId, pool)
+    }
+
+    for (tokenFromSymbol in tokenIdsFromPoolsBySymbol.keys) {
+        for (tokenToSymbol in tokenIdsFromPoolsBySymbol.keys) {
+            val paths = poolTree.getSwapPaths(tokenFromSymbol, tokenToSymbol)
+            swapPaths["$tokenFromSymbol to $tokenToSymbol"] = paths
+        }
+    }
+}
+
+private fun cachePoolTokensBySymbol(allTokens: Map<String, Token>, pools: Collection<PoolPair>) {
+    val tokensFromPoolsById = mutableMapOf<String, Token>()
+    for (pool in pools) {
+        tokensFromPoolsById[pool.idTokenA] = allTokens.getValue(pool.idTokenA)
+        tokensFromPoolsById[pool.idTokenB] = allTokens.getValue(pool.idTokenB)
+    }
+
+    val tokenIdsBySymbol = mutableMapOf<String, String>()
+    for ((tokenId, token) in tokensFromPoolsById) {
+        check(!tokenIdsBySymbol.containsKey(token.symbol)) {
+            "Duplicate symbol: ${token.symbol}"
+        }
+        tokenIdsBySymbol[token.symbol] = tokenId
+    }
+    tokenIdsFromPoolsBySymbol = tokenIdsBySymbol
+}
+
+private suspend fun cacheAllTokensById() {
+    tokensByID = RPC.listTokens()
+    tokensCached = gzip(tokensByID)
+}
+
+@kotlinx.serialization.Serializable
+data class PriceInfo(
+    val forwardPrice: Double,
+    val backwardPrice: Double,
+) {
+    override fun toString() =
+        "PriceInfo(forward=${"%.8f".format(forwardPrice)}, backward=${"%.8f".format(backwardPrice)})"
+}
+
+@kotlinx.serialization.Serializable
+data class PoolSwapExplained(
+    val commissionPct: Double?,
+    val commission: Double?,
+    val inFeePct: Double?,
+    val inFee: Double?,
+    val outFeePct: Double?,
+    val outFee: Double?,
+    val tokenFrom: String,
+    val tokenTo: String,
+    val amountFrom: Double,
+    val amountTo: Double,
+    val priceBefore: PriceInfo,
+    val priceAfter: PriceInfo,
+    val priceChange: PriceInfo,
+    val status: Boolean,
+    val tradeEnabled: Boolean,
+    val overflow: Boolean,
+)
+
+@kotlinx.serialization.Serializable
+data class PoolResult(
+    val tokenA: String,
+    val tokenB: String,
+    val priceBefore: PriceInfo,
+    val priceAfter: PriceInfo,
+    val priceChange: PriceInfo,
+)
+
+@kotlinx.serialization.Serializable
+data class DexResult(
+    val swapResults: List<SwapResult>,
+    val poolResults: List<PoolResult>
+)
