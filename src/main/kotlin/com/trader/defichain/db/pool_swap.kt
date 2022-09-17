@@ -1,6 +1,5 @@
 package com.trader.defichain.db
 
-import com.trader.defichain.indexer.TokenIndex
 import com.trader.defichain.rpc.CustomTX
 import kotlin.math.absoluteValue
 
@@ -11,8 +10,8 @@ private val template_insertPoolSwap = """
     """.trimIndent()
 
 fun DBTX.insertPoolSwap(txRowID: Long, swap: CustomTX.PoolSwap) {
-    insertToken(swap.fromToken, TokenIndex.getSymbol(swap.fromToken))
-    insertToken(swap.toToken, TokenIndex.getSymbol(swap.toToken))
+    insertTokens(swap.fromToken)
+    insertTokens(swap.toToken)
 
     val fromRowID = insertAddress(swap.fromAddress)
     val toRowID = insertAddress(swap.toAddress)

@@ -1,6 +1,7 @@
 package com.trader.defichain.db
 
 import com.trader.defichain.indexer.TokenIndex
+import com.trader.defichain.rpc.AccountHistory
 import com.trader.defichain.rpc.CustomTX
 
 private val template_insertPoolLiquidity = """
@@ -9,10 +10,33 @@ private val template_insertPoolLiquidity = """
     ON CONFLICT(tx_row_id) DO NOTHING
     """.trimIndent()
 
-fun DBTX.insertPoolLiquidity(txRowID: Long, liquidity: CustomTX.AddPoolLiquidity, shares: TokenIndex.TokenAmount) {
-    insertToken(liquidity.tokenA, TokenIndex.getSymbol(liquidity.tokenA))
-    insertToken(liquidity.tokenB, TokenIndex.getSymbol(liquidity.tokenB))
-    insertToken(shares.tokenID, TokenIndex.getSymbol(shares.tokenID))
+fun DBTX.removePoolLiquidity(
+    txRowID: Long,
+    liquidity: CustomTX.RemovePoolLiquidity,
+    amounts: AccountHistory.PoolLiquidityAmounts
+) {
+    val amountA = amounts.amountA
+    val amountB = amounts.amountB
+
+    insertTokens(amountA.tokenID, amountB.tokenID, liquidity.poolID)
+
+    val ownerRowID = insertAddress(liquidity.owner)
+
+    dbUpdater.prepareStatement(template_insertPoolLiquidity).use {
+        it.setLong(1, txRowID)
+        it.setInt(2, amountA.tokenID)
+        it.setInt(3, amountB.tokenID)
+        it.setDouble(4, amountA.amount)
+        it.setDouble(5, amountB.amount)
+        it.setInt(6, liquidity.poolID)
+        it.setDouble(7, liquidity.shares)
+        it.setLong(8, ownerRowID)
+        check(it.executeUpdate() <= 1)
+    }
+}
+
+fun DBTX.addPoolLiquidity(txRowID: Long, liquidity: CustomTX.AddPoolLiquidity, shares: TokenIndex.TokenAmount) {
+    insertTokens(liquidity.tokenA, liquidity.tokenB, shares.tokenID)
 
     val ownerRowID = insertAddress(liquidity.owner)
 
@@ -25,6 +49,6 @@ fun DBTX.insertPoolLiquidity(txRowID: Long, liquidity: CustomTX.AddPoolLiquidity
         it.setInt(6, shares.tokenID)
         it.setDouble(7, shares.amount)
         it.setLong(8, ownerRowID)
-        check(it.executeUpdate() == 1)
+        check(it.executeUpdate() <= 1)
     }
 }

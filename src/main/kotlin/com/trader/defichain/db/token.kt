@@ -1,5 +1,7 @@
 package com.trader.defichain.db
 
+import com.trader.defichain.indexer.TokenIndex
+
 private const val template_insertToken = """
 INSERT INTO token (dc_token_id, dc_token_symbol) VALUES (?, ?)
 ON CONFLICT(dc_token_id) DO UPDATE set dc_token_symbol = ?
@@ -7,26 +9,21 @@ ON CONFLICT(dc_token_id) DO UPDATE set dc_token_symbol = ?
 
 private val tokens = mutableMapOf<Int, String>()
 
-fun DBTX.insertTokens(tokens: Map<Int, String>) {
-    if (tokens.isEmpty()) return
+fun DBTX.insertTokens(vararg tokenIdentifiers: Int) {
+    for (tokenID in tokenIdentifiers) {
+        val tokenSymbol = TokenIndex.getSymbol(tokenID)
+        val currentTokenSymbol = tokens[tokenID]
+        if (tokenSymbol == currentTokenSymbol) {
+            continue
+        }
 
-    for ((tokenID, tokenSymbol) in tokens) {
-        insertToken(tokenID, tokenSymbol)
-    }
-}
+        dbUpdater.prepareStatement(template_insertToken).use {
+            it.setInt(1, tokenID)
+            it.setString(2, tokenSymbol)
+            it.setString(3, tokenSymbol)
+            check(it.executeUpdate() <= 1)
 
-fun DBTX.insertToken(tokenID: Int, tokenSymbol: String) {
-    val currentTokenSymbol = tokens[tokenID]
-    if (tokenSymbol == currentTokenSymbol) {
-        return
-    }
-
-    dbUpdater.prepareStatement(template_insertToken).use {
-        it.setInt(1, tokenID)
-        it.setString(2, tokenSymbol)
-        it.setString(3, tokenSymbol)
-        check(it.executeUpdate() <= 1)
-
-        tokens[tokenID] = tokenSymbol
+            tokens[tokenID] = tokenSymbol
+        }
     }
 }

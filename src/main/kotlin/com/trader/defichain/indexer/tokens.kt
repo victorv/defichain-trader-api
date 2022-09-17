@@ -47,17 +47,17 @@ suspend fun indexTokens(dbTX: DBTX) {
         tokenChanges[tokenID] = tokenSymbol
     }
 
-    if (tokenChanges.isNotEmpty()) {
-        logger.info("Indexing tokens $tokenChanges")
-        dbTX.insertTokens(tokenChanges)
-    }
-
     allTokenSymbolsByTokenID.putAll(tokenSymbolsByTokenID)
 
     for ((poolID, pool) in poolPairs) {
         putPoolTokenIDBySymbol(poolID)
         putPoolTokenIDBySymbol(pool.idTokenA.toInt())
         putPoolTokenIDBySymbol(pool.idTokenB.toInt())
+    }
+
+    if (tokenChanges.isNotEmpty()) {
+        logger.info("Indexing tokens $tokenChanges")
+        dbTX.insertTokens(*tokenChanges.keys.toIntArray())
     }
 }
 
