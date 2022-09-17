@@ -11,13 +11,8 @@ private val template_insertPoolSwap = """
     """.trimIndent()
 
 fun DBTX.insertPoolSwap(txRowID: Long, swap: CustomTX.PoolSwap) {
-    val addresses = HashSet<String>()
-
     insertToken(swap.fromToken, TokenIndex.getSymbol(swap.fromToken))
     insertToken(swap.toToken, TokenIndex.getSymbol(swap.toToken))
-
-    addresses.add(swap.fromAddress)
-    addresses.add(swap.toAddress)
 
     val fromRowID = insertAddress(swap.fromAddress)
     val toRowID = insertAddress(swap.toAddress)
