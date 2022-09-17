@@ -1,7 +1,6 @@
 package com.trader.defichain.db
 
 import com.trader.defichain.dex.getOraclePriceForSymbol
-import com.trader.defichain.indexer.ZMQTransaction
 import com.trader.defichain.util.floorPlain
 import org.postgresql.ds.PGSimpleDataSource
 import org.slf4j.LoggerFactory
@@ -10,7 +9,6 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.Types
-import kotlin.math.absoluteValue
 
 private val logger = LoggerFactory.getLogger("DB")
 
@@ -39,67 +37,6 @@ inner join minted_tx on pool_swap.tx_row_id = minted_tx.tx_row_id
 where block_height >= (select max(block_height) from minted_tx) - 120 
 group by token.dc_token_symbol;
 """.trimIndent()
-
-private val template_oldestPoolSwapBlock =
-    """
-    select coalesce(min(block_height), 2147483647) from minted_tx 
-    inner join pool_swap on pool_swap.tx_row_id = minted_tx.tx_row_id;
-    """.trimIndent()
-
-private val template_latestPoolSwapBlock =
-    """
-    select coalesce(max(block_height), 0) from minted_tx 
-    inner join pool_swap on pool_swap.tx_row_id = minted_tx.tx_row_id;
-    """.trimIndent()
-
-private val template_insertTXType =
-    """
-    INSERT INTO tx_type (dc_tx_type) VALUES (?)
-    ON CONFLICT (dc_tx_type) DO UPDATE SET dc_tx_type = tx_type.dc_tx_type
-    RETURNING row_id;
-    """.trimIndent()
-
-private val template_insertTX =
-    """
-    INSERT INTO tx (dc_tx_id, tx_type_row_id) VALUES (?, ?)
-    ON CONFLICT (dc_tx_id) DO UPDATE SET dc_tx_id = tx.dc_tx_id
-    RETURNING row_id;
-    """.trimIndent()
-
-private val template_insertUnconfirmedTX =
-    """
-    INSERT INTO unconfirmed_tx (tx_row_id, hex) VALUES (?, ?)
-    ON CONFLICT (tx_row_id) DO NOTHING
-    """.trimIndent()
-
-private val template_insertMempoolTX =
-    """
-    INSERT INTO mempool (tx_row_id, time_received, block_height_received, fee) VALUES (?, ?, ?, ?)
-    ON CONFLICT (tx_row_id) DO NOTHING
-    """.trimIndent()
-
-private val template_insertMintedTX =
-    """
-    INSERT INTO minted_tx (tx_row_id, block_time, block_height, ordinal, fee) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT (tx_row_id) DO UPDATE SET tx_row_id = minted_tx.tx_row_id
-    """.trimIndent()
-
-private val template_insertAddress = """
-    INSERT INTO address (dc_address) VALUES (?)
-    ON CONFLICT (dc_address) DO UPDATE SET dc_address = address.dc_address
-    RETURNING row_id;
-    """.trimIndent()
-
-private val template_insertToken = """
-    INSERT INTO token (dc_token_id, dc_token_symbol) VALUES (?, ?)
-    ON CONFLICT(dc_token_id) DO UPDATE set dc_token_symbol = ?
-    """.trimIndent()
-
-private val template_insertPoolSwap = """
-    INSERT INTO pool_swap (tx_row_id, "from", "to", token_from, token_to, amount_from, amount_to, max_price) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(tx_row_id) DO UPDATE set amount_to = coalesce(?, pool_swap.amount_to)
-    """.trimIndent()
 
 private val template_selectPoolSwaps = """
     select tx.dc_tx_id as tx_id,
@@ -131,7 +68,6 @@ private val template_selectPoolSwaps = """
 """.trimIndent()
 
 private val connectionPool = createConnectionPool()
-private val tokens = mutableMapOf<Int, String>()
 
 private fun createConnectionPool(): PGSimpleDataSource {
     val connectionPool = PGSimpleDataSource()
@@ -162,12 +98,12 @@ private fun useOrReplace(connection: Connection): Connection {
     return connection
 }
 
-private fun insertOrDoNothing(statement: PreparedStatement) {
+fun insertOrDoNothing(statement: PreparedStatement) {
     val updateCount = statement.executeUpdate()
     check(updateCount == 0 || updateCount == 1)
 }
 
-private fun upsertReturning(statement: PreparedStatement): Long {
+fun upsertReturning(statement: PreparedStatement): Long {
     statement.executeQuery().use { resultSet ->
         check(resultSet.next())
 
@@ -179,166 +115,15 @@ private fun upsertReturning(statement: PreparedStatement): Long {
     }
 }
 
-private fun insertTransactionType(updater: DB.Updater, txType: String): Int {
-    updater.prepareStatement(template_insertTXType).use {
-        it.setString(1, txType)
-        return upsertReturning(it).toInt()
-    }
-}
-
-private fun insertTX(updater: DB.Updater, txID: String, txType: String): Long {
-    val txTypeRowID = insertTransactionType(updater, txType)
-
-    updater.prepareStatement(template_insertTX).use {
-        it.setString(1, txID)
-        it.setInt(2, txTypeRowID)
-        return upsertReturning(it)
-    }
-}
-
-private fun insertMempoolEntry(updater: DB.Updater, txRowID: Long, tx: ZMQTransaction) {
-    updater.prepareStatement(template_insertMempoolTX).use {
-        it.setLong(1, txRowID)
-        it.setLong(2, tx.timeReceived)
-        it.setInt(3, tx.blockHeightReceived)
-        it.setBigDecimal(4, tx.fee)
-        insertOrDoNothing(it)
-    }
-}
-
-private fun insertToken(updater: DB.Updater, tokenID: Int, tokenSymbol: String) {
-    if (tokens.containsKey(tokenID)) {
-        return
-    }
-
-    updater.prepareStatement(template_insertToken).use {
-        it.setInt(1, tokenID)
-        it.setString(2, tokenSymbol)
-        it.setString(3, tokenSymbol)
-        check(it.executeUpdate() <= 1)
-
-        tokens[tokenID] = tokenSymbol
-    }
-}
-
-private fun insertMintedTX(updater: DB.Updater, txRowID: Long, mintedTX: DB.MintedTX) {
-    updater.prepareStatement(template_insertMintedTX).use {
-        it.setLong(1, txRowID)
-        it.setLong(2, mintedTX.blockTime)
-        it.setInt(3, mintedTX.blockHeight)
-        it.setInt(4, mintedTX.txOrdinal)
-        it.setBigDecimal(5, mintedTX.txFee)
-        insertOrDoNothing(it)
-    }
-}
-
-private fun insertPoolSwap(updater: DB.Updater, txRowID: Long, swap: DB.PoolSwap) {
-    val addresses = HashSet<String>()
-
-    insertToken(updater, swap.tokenFrom, tokens.getValue(swap.tokenFrom))
-    insertToken(updater, swap.tokenTo, tokens.getValue(swap.tokenTo))
-
-    addresses.add(swap.from)
-    addresses.add(swap.to)
-
-    val fromRowID = insertAddress(updater, swap.from)
-    val toRowID = insertAddress(updater, swap.to)
-
-    updater.prepareStatement(template_insertPoolSwap).use {
-        it.setLong(1, txRowID)
-        it.setLong(2, fromRowID)
-        it.setLong(3, toRowID)
-        it.setInt(4, swap.tokenFrom)
-        it.setInt(5, swap.tokenTo)
-        it.setDouble(6, swap.amountFrom.absoluteValue)
-        it.setDoubleOrNull(7, swap.amountTo?.absoluteValue)
-        it.setDouble(8, swap.maxPrice)
-        it.setDoubleOrNull(9, swap.amountTo?.absoluteValue)
-        check(it.executeUpdate() == 1)
-    }
-}
-
-private fun insertAddress(
-    updater: DB.Updater,
-    address: String,
-): Long {
-    updater.prepareStatement(template_insertAddress).use {
-        it.setString(1, address)
-        return upsertReturning(it)
-    }
-}
 
 fun PreparedStatement.setDoubleOrNull(parameterIndex: Int, double: Double?) {
     if (double == null) setNull(parameterIndex, Types.DOUBLE)
     else setDouble(parameterIndex, double)
 }
 
-private fun insertUnconfirmedTX(updater: DB.Updater, txRowID: Long, rawTX: String) {
-    updater.prepareStatement(template_insertUnconfirmedTX).use {
-        it.setLong(1, txRowID)
-        it.setString(2, rawTX)
-        insertOrDoNothing(it)
-    }
-}
-
-private fun insertMintedPoolSwap(updater: DB.Updater, mintedTX: DB.MintedTX, swap: DB.PoolSwap) {
-    val txRowID = insertTX(updater, mintedTX.txID, "PoolSwap")
-    insertMintedTX(updater, txRowID, mintedTX)
-    insertPoolSwap(updater, txRowID, swap)
-}
+class DBTX(val dbUpdater: DB.Updater)
 
 object DB {
-    fun insertZMQTransactions(updater: Updater, transactions: List<ZMQTransaction>) {
-        if (transactions.isEmpty()) return
-        updater.doTransaction {
-            for (tx in transactions) {
-                val txRowID = insertTX(updater, tx.txID, tx.type)
-                insertMempoolEntry(updater, txRowID, tx)
-                if (tx.poolSwap != null) {
-                    insertPoolSwap(updater, txRowID, tx.poolSwap)
-                }
-                if (!tx.isConfirmed) {
-                    insertUnconfirmedTX(updater, txRowID, tx.hex)
-                }
-            }
-        }
-    }
-
-    fun insertTokens(updater: Updater, tokens: Map<Int, String>) {
-        if (tokens.isEmpty()) return
-        updater.doTransaction {
-            for ((tokenID, tokenSymbol) in tokens) {
-                insertToken(updater, tokenID, tokenSymbol)
-            }
-        }
-    }
-
-    fun insertMintedPoolSwaps(updater: Updater, entries: List<Pair<MintedTX, PoolSwap>>) {
-        if (entries.isEmpty()) return
-        updater.doTransaction {
-            for ((mintedTX, swap) in entries) {
-                insertMintedPoolSwap(updater, mintedTX, swap)
-            }
-        }
-    }
-
-    fun getOldestPoolSwapBlock(updater: Updater): Int {
-        updater.prepareStatement(template_oldestPoolSwapBlock).use {
-            it.executeQuery().use { resultSet ->
-                check(resultSet.next())
-                return resultSet.getInt(1)
-            }
-        }
-    }
-
-    fun getLatestPoolSwapBlock(updater: Updater): Int {
-        updater.prepareStatement(template_latestPoolSwapBlock).use {
-            it.executeQuery().use { resultSet ->
-                check(resultSet.next())
-                return resultSet.getInt(1)
-            }
-        }
-    }
 
     fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
         val conditions = Conditions()
@@ -435,9 +220,9 @@ object DB {
             return connection.prepareStatement(sql)
         }
 
-        inline fun <reified T> doTransaction(run: () -> T): T {
+        inline fun <reified T> doTransaction(run: (dbTX: DBTX) -> T): T {
             try {
-                val result = run()
+                val result = run(DBTX(this))
                 connection.commit()
                 return result
             } catch (t: Throwable) {
@@ -465,12 +250,6 @@ object DB {
         fun addIfPresent(sql: String, data: String?) {
             if (data != null) {
                 addCondition(StringCondition(sql = sql, offset = offset, data = data))
-            }
-        }
-
-        fun addIfPresent(sql: String, data: Int?) {
-            if (data != null) {
-                addCondition(IntCondition(sql = sql, offset = offset, data = data))
             }
         }
 
@@ -519,17 +298,6 @@ object DB {
 
         override fun setParameter(statement: PreparedStatement, startIndex: Int) {
             statement.setString(startIndex + offset, data)
-        }
-    }
-
-    data class IntCondition(
-        override val sql: String,
-        override val offset: Int,
-        val data: Int,
-    ) : Condition {
-
-        override fun setParameter(statement: PreparedStatement, startIndex: Int) {
-            statement.setInt(startIndex + offset, data)
         }
     }
 
@@ -603,9 +371,10 @@ object DB {
 
     data class MintedTX(
         val txID: String,
-        val blockHeight: Int,
+        val blockHeight: Long,
         val blockTime: Long,
         val txFee: BigDecimal,
-        val txOrdinal: Int,
+        val txn: Int,
+        val type: String,
     )
 }

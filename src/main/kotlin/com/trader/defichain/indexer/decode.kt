@@ -1,11 +1,9 @@
 package com.trader.defichain.indexer
 
-import com.trader.defichain.db.DB
-import com.trader.defichain.rpc.*
+import com.trader.defichain.rpc.RPC
+import com.trader.defichain.rpc.RPCMethod
+import com.trader.defichain.rpc.TX
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.double
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonPrimitive
 import java.math.BigDecimal
 
 suspend fun calculateFee(
@@ -29,33 +27,3 @@ private suspend fun decodeRawTransactions(txID: String) = RPC.getValue<TX>(
     JsonPrimitive(txID),
     JsonPrimitive(true),
 )
-
-suspend fun calculateFee(
-    txID: String,
-): BigDecimal {
-    val tx = RPC.getValue<TX>(
-        RPCMethod.GET_RAW_TRANSACTION, JsonPrimitive(txID), JsonPrimitive(true),
-    )
-    return calculateFee(tx, emptyMap())
-}
-
-suspend fun getMaxPrice(txID: String): Double {
-    val swap = RPC.getCustomTX(txID)
-    check(swap != null)
-    return swap.results.getValue("maxPrice").jsonPrimitive.double
-}
-
-fun decodePoolSwap(customTX: CustomTX?): DB.PoolSwap? {
-    if (customTX == null || customTX.type != "PoolSwap") return null
-
-    val results = customTX.results
-    return DB.PoolSwap(
-        from = results.getValue("fromAddress").jsonPrimitive.content,
-        to = results.getValue("toAddress").jsonPrimitive.content,
-        tokenFrom = results.getValue("fromToken").jsonPrimitive.int,
-        tokenTo = results.getValue("toToken").jsonPrimitive.int,
-        amountFrom = results.getValue("fromAmount").jsonPrimitive.double,
-        amountTo = null,
-        maxPrice = results.getValue("maxPrice").jsonPrimitive.double,
-    )
-}

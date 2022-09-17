@@ -1,17 +1,10 @@
 package com.trader.defichain.rpc
 
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonPrimitive
 
 @kotlinx.serialization.Serializable
-data class CustomTX(
-    val type: String,
-    val valid: Boolean,
-    val results: JsonObject
-)
-
-@kotlinx.serialization.Serializable
-data class Token (
+data class Token(
     val symbol: String,
     val symbolKey: String,
     val name: String,
@@ -41,22 +34,21 @@ data class OraclePrice(
 )
 
 @kotlinx.serialization.Serializable
-data class MempoolEntry(
-    val fee: Double,
-    val height: Int,
-    val time: Long,
-)
-
-@kotlinx.serialization.Serializable
 data class Block(
-    val height: Int,
+    val height: Long,
+    val hash: String,
     val tx: List<TX>,
-)
+    val time: Long,
+    @JsonNames("previousblockhash")
+    val previousBlockHash: String? = null,
+) {
+    init {
+        tx.forEachIndexed { txn, tx -> tx.txn = txn }
+    }
+}
 
 enum class RPCMethod(val id: String) {
-    GET_RAW_MEMPOOL("getrawmempool"),
     DECODE_RAW_TRANSACTION("decoderawtransaction"),
-    GET_CUSTOM_TX("getcustomtx"),
     TEST_POOL_SWAP("testpoolswap"),
     GET_BLOCK_COUNT("getblockcount"),
     LIST_POOL_PAIRS("listpoolpairs"),
@@ -64,8 +56,7 @@ enum class RPCMethod(val id: String) {
     LIST_PRICES("listprices"),
     GET_BEST_BLOCK_HASH("getbestblockhash"),
     GET_BLOCK("getblock"),
-    LIST_ACCOUNT_HISTORY("listaccounthistory"),
+    GET_ACCOUNT_HISTORY("getaccounthistory"),
     DECODE_CUSTOM_TX("decodecustomtx"),
-    GET_MEMPOOL_ENTRY("getmempoolentry"),
     GET_RAW_TRANSACTION("getrawtransaction");
 }

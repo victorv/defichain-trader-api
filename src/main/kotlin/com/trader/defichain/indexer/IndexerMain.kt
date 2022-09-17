@@ -25,16 +25,22 @@ private fun loadIndexerConfig(path: String) {
 fun main(vararg args: String) {
     loadIndexerConfig(args[0])
     runBlocking {
-        indexTokens(initialDatabaseUpdater)
+        initialDatabaseUpdater.doTransaction {
+            indexTokens(it)
+        }
     }
 
-    var scopes = ArrayList<Job>()
+    val scopes = ArrayList<Job>()
     scopes += GlobalScope.launch {
         receiveFullNodeEvents(ZContext(), coroutineContext)
     }
 
     scopes += GlobalScope.launch {
-        indexAccountHistory(coroutineContext)
+        announceZMQBatches(coroutineContext)
+    }
+
+    scopes += GlobalScope.launch {
+        indexZMQBatches(coroutineContext)
     }
 
     scopes += GlobalScope.launch {
