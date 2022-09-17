@@ -9,8 +9,10 @@ data class TX(
     val txID: String,
     val vin: List<Vin>,
     val vout: List<Vout>,
-    val hex: String? = null,
-)
+    var hex: String? = null,
+) {
+    var txn = -1
+}
 
 @Serializable
 data class Vin(

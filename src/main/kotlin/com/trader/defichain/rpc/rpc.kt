@@ -15,13 +15,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
 const val dummyAddress = "dLXs788fWMpGoar1WzDnLoNCNYyZVPPozv"
+private val decoder = Json{
+    ignoreUnknownKeys = true
+}
 
-private const val noSuchTXError = "No such mempool or wallet transaction. Use -txindex or provide a block hash."
-private const val notACustomTXError = "Not a custom transaction"
-private const val txDecodeFailed = "TX decode failed"
-private const val txNotInMempool = "Transaction not in mempool"
-
-val withIgnoreUnknownKeys = Json { ignoreUnknownKeys = true }
 val limit1000 = JsonObject(
     mapOf(
         "limit" to JsonPrimitive(1000)
@@ -31,8 +28,7 @@ val limit1000 = JsonObject(
 class RPC {
     companion object {
 
-        val notErrors = setOf(noSuchTXError, notACustomTXError, txDecodeFailed, txNotInMempool)
-        suspend inline fun <reified T> getValue(method: RPCMethod, vararg parameters: JsonElement): T {
+        suspend inline fun <reified T> tryGet(method: RPCMethod, vararg parameters: JsonElement): RPCResponse<T?> {
             val request = RPCRequest(
                 jsonrpc = "1.0",
                 method = method.id,
@@ -44,44 +40,34 @@ class RPC {
                     setBody(request)
                 }
 
-                val responseBody: RPCResponse<T?> = response.body()
-                if (notErrors.contains(responseBody.error?.message)) {
-                    return JsonNull as T
+                val responseBody = response.body<RPCResponse<T?>>()
+                check(responseBody.result != null || responseBody.error != null) {
+                    "Request failed, invalid response body: ${request}, $responseBody"
                 }
+                return responseBody
 
-                val result = responseBody.result
-                check(result != null) {
-                    "Request failed: $request, $responseBody"
-                }
-                return result
             } catch (e: Throwable) {
                 throw RuntimeException("Request failed: $request", e)
             }
         }
 
-        suspend fun getMempoolEntry(txID: String): MempoolEntry? {
-            val mempoolEntry = getValue<JsonElement>(RPCMethod.GET_MEMPOOL_ENTRY, JsonPrimitive(txID))
-            if (mempoolEntry is JsonPrimitive) {
+        suspend inline fun <reified T> getValue(method: RPCMethod, vararg parameters: JsonElement): T {
+            val responseBody = tryGet<T>(method, *parameters)
+            check(responseBody.result != null && responseBody.error == null) {
+                "Request failed: RPCRequest(${method}, $parameters), $responseBody"
+            }
+            return responseBody.result
+        }
+        suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? =
+            asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
+
+        private fun asCustomTX(result: JsonElement?): CustomTX.Record? {
+            if (result is JsonPrimitive || result == null) {
                 return null
             }
-            return withIgnoreUnknownKeys.decodeFromJsonElement(mempoolEntry)
-        }
-
-        suspend fun getCustomTX(txID: String): CustomTX? {
-            val customTX = getValue<JsonElement>(RPCMethod.GET_CUSTOM_TX, JsonPrimitive(txID))
-            return asCustomTX(customTX)
-        }
-
-        suspend fun decodeCustomTX(rawTX: String): CustomTX? {
-            val customTX = getValue<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX))
-            return asCustomTX(customTX)
-        }
-
-        private fun asCustomTX(customTX: JsonElement): CustomTX? {
-            if (customTX is JsonPrimitive) { // result is an error message string or raw TX could not be decoded
-                return null
-            }
-            return withIgnoreUnknownKeys.decodeFromJsonElement(customTX)
+            val record = decoder.decodeFromJsonElement<CustomTX.Record>(result)
+            check(record.valid) { "Invalid custom TX: $record" }
+            return record
         }
 
         suspend fun listPoolPairs(): Map<String, PoolPair> = getValue(
