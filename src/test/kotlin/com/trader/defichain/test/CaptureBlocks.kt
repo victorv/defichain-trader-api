@@ -60,14 +60,32 @@ private suspend fun testPoolSwap(tokenFrom: String, tokenTo: String, amountFrom:
         to = dummyAddress,
     )
     val encodedPoolSwapTest = Json.encodeToJsonElement(poolSwapTest)
-    val response = RPC.getValue<PoolSwapTestResponse>(
+    val autoResponse = RPC.getValue<PoolSwapTestResponse>(
         RPCMethod.TEST_POOL_SWAP,
         encodedPoolSwapTest,
         JsonPrimitive("auto"),
         JsonPrimitive(true),
     )
 
-    poolSwapTest.estimate = response.amount.split("@").first().toDouble()
+    var estimate = autoResponse.amount.split("@").first().toDouble()
+    var response = autoResponse
+
+    if (autoResponse.path == "direct") {
+        val compositeResponse = RPC.getValue<PoolSwapTestResponse>(
+            RPCMethod.TEST_POOL_SWAP,
+            encodedPoolSwapTest,
+            JsonPrimitive("composite"),
+            JsonPrimitive(true),
+        )
+        val compositeEstimate = compositeResponse.amount.split("@").first().toDouble()
+
+        if (compositeEstimate > estimate) {
+            estimate = compositeEstimate
+            response = compositeResponse
+        }
+    }
+
+    poolSwapTest.estimate = estimate
     poolSwapTest.response = response
     return poolSwapTest
 }
