@@ -107,7 +107,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
         poolsForAllSwaps = poolsAfterBestSwap
 
         val bestEstimate =
-            allPathsExplained.firstOrNull { it.status && it.tradeEnabled && !it.overflow }?.estimate ?: 0.0
+            allPathsExplained.filter { it.status && it.tradeEnabled && !it.overflow }.maxOfOrNull { it.estimate } ?: 0.0
         val desiredResult = poolSwap.desiredResult!!
         val maxPrice = poolSwap.amountFrom / desiredResult
         val pathsBestToWorst =
@@ -141,7 +141,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
         }
 
     return DexResult(
-        swapResults = swapResults,
+        swapResults = swapResults.sortedByDescending { it.estimate },
         poolResults = poolResults
     )
 }
