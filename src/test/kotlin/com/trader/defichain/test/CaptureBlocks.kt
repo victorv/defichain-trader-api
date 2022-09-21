@@ -33,7 +33,7 @@ suspend fun main() {
     val prices = RPC.listPrices()
     checkBlockCountIs(blockCount)
 
-    capturePoolSwapTests(poolPairs.values)
+    capturePoolSwapTests()
     checkBlockCountIs(blockCount)
 
     capturedBlocks.add(
@@ -60,27 +60,38 @@ private suspend fun testPoolSwap(tokenFrom: String, tokenTo: String, amountFrom:
         to = dummyAddress,
     )
     val encodedPoolSwapTest = Json.encodeToJsonElement(poolSwapTest)
-    val response = RPC.getValue<PoolSwapTestResponse>(
+    val autoResponse = RPC.getValue<PoolSwapTestResponse>(
         RPCMethod.TEST_POOL_SWAP,
         encodedPoolSwapTest,
         JsonPrimitive("auto"),
         JsonPrimitive(true),
     )
 
-    poolSwapTest.estimate = response.amount.split("@").first().toDouble()
+    var estimate = autoResponse.amount.split("@").first().toDouble()
+    var response = autoResponse
+
+    if (autoResponse.path == "direct") {
+        val compositeResponse = RPC.getValue<PoolSwapTestResponse>(
+            RPCMethod.TEST_POOL_SWAP,
+            encodedPoolSwapTest,
+            JsonPrimitive("composite"),
+            JsonPrimitive(true),
+        )
+        val compositeEstimate = compositeResponse.amount.split("@").first().toDouble()
+
+        if (compositeEstimate > estimate) {
+            estimate = compositeEstimate
+            response = compositeResponse
+        }
+    }
+
+    poolSwapTest.estimate = estimate
     poolSwapTest.response = response
     return poolSwapTest
 }
 
-private suspend fun capturePoolSwapTests(pools: Collection<PoolPair>) {
-    val tokens = mutableSetOf<String>()
-    for ((tokenFrom, tokenTo) in pools.map { it.symbol.split("-") }) {
-        for (token in arrayOf(tokenFrom, tokenTo)) {
-            if (token.contains("/") || token == "BURN") continue
-            tokens.add(token)
-        }
-    }
-
+private suspend fun capturePoolSwapTests() {
+    val tokens = setOf("USDT", "USDC", "DFI", "BTC", "DOGE", "LTC", "ETH", "BCH", "DUSD", "TSLA", "AMZN")
     val amounts = listOf(9000000.0, 1000.0, 0.0005, 0.00001234)
 
     for (amount in amounts) {
@@ -90,12 +101,6 @@ private suspend fun capturePoolSwapTests(pools: Collection<PoolPair>) {
                     continue
                 }
                 if (fromTokenSymbol == "DFI" && toTokenSymbol == "DUSD") {
-                    continue
-                }
-
-                val tokens = listOf(fromTokenSymbol, toTokenSymbol)
-                // circumvent testpoolswap bug where it selects an invalid path
-                if (tokens.contains("DUSD") && (tokens.contains("USDT") || tokens.contains("USDC"))) {
                     continue
                 }
 

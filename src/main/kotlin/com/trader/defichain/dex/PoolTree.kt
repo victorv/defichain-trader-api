@@ -25,7 +25,7 @@ private class TokenNode(val tokenId: String) {
 
             if (connectedToken.tokenId == toTokenId) {
                 paths.add(path.copyOfRange(0, depth + 1).map { it.poolId }.toList())
-            } else {
+            } else if (depth <= 1) { // consensus dictates that you can only swap through 3 pools; 3rd pool is tried at depth 2
                 connectedToken.findPaths(toTokenId, path, depth + 1, paths)
             }
         }

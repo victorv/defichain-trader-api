@@ -10,7 +10,7 @@
   },
   "rpc": {
     "host": "127.0.0.1",
-    "port": 8332,
+    "port": 8554,
     "user": "k3i43fiefe93",
     "password": "egm39rgerinjenge"
   },
