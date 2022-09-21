@@ -104,12 +104,6 @@ private suspend fun capturePoolSwapTests() {
                     continue
                 }
 
-                val tokens = listOf(fromTokenSymbol, toTokenSymbol)
-                // circumvent testpoolswap bug where it selects an invalid path
-                if (tokens.contains("DUSD") && (tokens.contains("USDT") || tokens.contains("USDC"))) {
-                    continue
-                }
-
                 val result = testPoolSwap(fromTokenSymbol, toTokenSymbol, amount)
                 swapResults.add(result)
             }
