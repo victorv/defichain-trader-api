@@ -33,7 +33,7 @@ suspend fun main() {
     val prices = RPC.listPrices()
     checkBlockCountIs(blockCount)
 
-    capturePoolSwapTests(poolPairs.values)
+    capturePoolSwapTests()
     checkBlockCountIs(blockCount)
 
     capturedBlocks.add(
@@ -72,15 +72,8 @@ private suspend fun testPoolSwap(tokenFrom: String, tokenTo: String, amountFrom:
     return poolSwapTest
 }
 
-private suspend fun capturePoolSwapTests(pools: Collection<PoolPair>) {
-    val tokens = mutableSetOf<String>()
-    for ((tokenFrom, tokenTo) in pools.map { it.symbol.split("-") }) {
-        for (token in arrayOf(tokenFrom, tokenTo)) {
-            if (token.contains("/") || token == "BURN") continue
-            tokens.add(token)
-        }
-    }
-
+private suspend fun capturePoolSwapTests() {
+    val tokens = setOf("USDT", "USDC", "DFI", "BTC", "DOGE", "LTC", "ETH", "BCH", "DUSD", "TSLA", "AMZN")
     val amounts = listOf(9000000.0, 1000.0, 0.0005, 0.00001234)
 
     for (amount in amounts) {
