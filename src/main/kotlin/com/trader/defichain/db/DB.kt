@@ -2,6 +2,7 @@ package com.trader.defichain.db
 
 import com.trader.defichain.dex.getOraclePriceForSymbol
 import com.trader.defichain.util.floorPlain
+import kotlinx.serialization.json.*
 import org.postgresql.ds.PGSimpleDataSource
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
@@ -67,7 +68,7 @@ private val template_selectPoolSwaps = """
     limit 100;
 """.trimIndent()
 
-private val connectionPool = createConnectionPool()
+val connectionPool = createConnectionPool()
 
 private fun createConnectionPool(): PGSimpleDataSource {
     val connectionPool = PGSimpleDataSource()
@@ -125,6 +126,58 @@ class DBTX(val dbUpdater: DB.Updater)
 
 object DB {
 
+    fun asJsonElement(value: Any): JsonElement = when (value) {
+        null -> JsonNull
+        is String -> JsonPrimitive(value)
+        is Long -> JsonPrimitive(value)
+        is Int -> JsonPrimitive(value)
+        is Double -> JsonPrimitive(value)
+        is Boolean -> JsonPrimitive(value)
+        is BigDecimal -> JsonPrimitive(value)
+        else -> throw IllegalArgumentException("Can not convert to JsonElement: $value")
+    }
+
+    inline fun <reified T> selectAll(view: String): MutableList<T> {
+        val results = ArrayList<T>()
+        connectionPool.connection.use {
+
+            it.prepareStatement("select * from $view;").use { statement ->
+
+                statement.executeQuery().use { resultSet ->
+
+                    val metaData = resultSet.metaData
+                    val columnLabels = ArrayList<String>(metaData.columnCount)
+                    for (i in 1..metaData.columnCount) {
+                        columnLabels.add(resultSet.metaData.getColumnLabel(i))
+                    }
+
+                    val isPrimitive = metaData.columnCount == 1
+
+                    while (resultSet.next()) {
+
+                        if (isPrimitive) {
+                            results.add(
+                                Json.decodeFromJsonElement(
+                                    asJsonElement(resultSet.getObject(1))
+                                )
+                            )
+                        } else {
+                            val properties = HashMap<String, JsonElement>()
+                            for ((i, columnLabel) in columnLabels.withIndex()) {
+                                properties[columnLabel] = asJsonElement(
+                                    resultSet.getObject(i + 1)
+                                )
+                            }
+
+                            results.add(Json.decodeFromJsonElement(JsonObject(properties)))
+                        }
+                    }
+                }
+            }
+        }
+        return results
+    }
+
     fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
         val conditions = Conditions()
         conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
@@ -139,6 +192,7 @@ object DB {
             it.prepareStatement(conditions.updatedQuery(template_selectPoolSwaps)).use { statement ->
                 conditions.setData(1, statement)
                 statement.executeQuery().use { resultSet ->
+
                     while (resultSet.next()) {
                         poolSwaps.add(
                             getPoolSwapRow(resultSet)
