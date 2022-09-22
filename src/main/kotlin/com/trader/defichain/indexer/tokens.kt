@@ -24,6 +24,12 @@ object TokenIndex {
     fun getPoolPair(poolID: Int): PoolPair = poolPairs.getValue(poolID)
 
     fun getSymbol(tokenID: Int) = allTokenSymbolsByTokenID.getValue(tokenID)
+    fun getPoolID(tokenA: Int, tokenB: Int): Int {
+        val tokens = setOf(tokenA.toString(), tokenB.toString())
+        return poolPairs.entries
+            .first { tokens.contains(it.value.idTokenA) && tokens.contains(it.value.idTokenB) }
+            .key
+    }
 
     data class TokenAmount(
         val tokenID: Int,

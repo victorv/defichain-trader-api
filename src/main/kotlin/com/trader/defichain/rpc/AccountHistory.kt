@@ -13,13 +13,21 @@ private val decoder = Json { ignoreUnknownKeys = true }
 object AccountHistory {
 
     suspend fun getPoolLiquidityShares(
-        owner: String,
+        addPoolLiquidity: CustomTX.AddPoolLiquidity,
         blockHeight: Long,
         txn: Int
     ): TokenIndex.TokenAmount {
-        val record = getRecord<PoolLiquidity>(owner, blockHeight, txn)
-        val shares = record.amounts.first { it.split("@").last().indexOf("-") > 0 }
-        return TokenIndex.decodeTokenAmount(shares)
+        val record = getRecord<PoolLiquidity>(addPoolLiquidity.owner, blockHeight, txn)
+        if(record != null) {
+            val shares = record.amounts.first { it.split("@").last().indexOf("-") > 0 }
+            return TokenIndex.decodeTokenAmount(shares)
+        }
+
+        val poolID = TokenIndex.getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
+        return TokenIndex.TokenAmount(
+            tokenID = poolID,
+            amount = Double.MIN_VALUE,
+        )
     }
 
     suspend fun getPoolLiquidityAmounts(
@@ -28,23 +36,35 @@ object AccountHistory {
         txn: Int,
         poolID: Int,
     ): PoolLiquidityAmounts {
+        val pool = TokenIndex.getPoolPair(poolID)
+        val idTokenA = pool.idTokenA.toInt()
+        val idTokenB = pool.idTokenB.toInt()
+
         val record = getRecord<PoolLiquidity>(owner, blockHeight, txn)
 
-        val pool = TokenIndex.getPoolPair(poolID)
+        if(record != null) {
+            val amountA = record.amounts
+                .first { it.endsWith(TokenIndex.getSymbol(idTokenA)) }
+            val amountB = record.amounts
+                .first { it.endsWith(TokenIndex.getSymbol(idTokenB)) }
 
-        val amountA = record.amounts
-            .first { it.endsWith(TokenIndex.getSymbol(pool.idTokenA.toInt())) }
-        val amountB = record.amounts
-            .first { it.endsWith(TokenIndex.getSymbol(pool.idTokenB.toInt())) }
+            return PoolLiquidityAmounts(
+                amountA = TokenIndex.decodeTokenAmount(amountA),
+                amountB = TokenIndex.decodeTokenAmount(amountB),
+            )
+        }
 
         return PoolLiquidityAmounts(
-            amountA = TokenIndex.decodeTokenAmount(amountA),
-            amountB = TokenIndex.decodeTokenAmount(amountB),
+            amountA = TokenIndex.TokenAmount(idTokenA, Double.MIN_VALUE),
+            amountB = TokenIndex.TokenAmount(idTokenB, Double.MIN_VALUE),
         )
     }
 
     suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): Double {
         val amounts = getPoolSwapAmounts(poolSwap.fromAddress, blockHeight, txn).toMutableList()
+        if (amounts.isEmpty()) {
+            return Double.MIN_VALUE
+        }
 
         val firstAmount = amounts.first()
 
@@ -71,6 +91,10 @@ object AccountHistory {
             }
         }
 
+        if (amounts.isEmpty()) {
+            return Double.MIN_VALUE
+        }
+
         if (amounts.size == 1) {
             if (poolSwap.fromToken == poolSwap.toToken) {
                 return poolSwap.fromAmount + firstAmount.amount
@@ -90,7 +114,7 @@ object AccountHistory {
     }
 
     private suspend fun getPoolSwapAmounts(owner: String, blockHeight: Long, txn: Int): List<TokenIndex.TokenAmount> {
-        val swap = getRecord<PoolSwap>(owner, blockHeight, txn)
+        val swap = getRecord<PoolSwap>(owner, blockHeight, txn) ?: return emptyList()
 
         check(swap.type == "PoolSwap") { err("poolSwap" to swap) }
 
@@ -106,13 +130,16 @@ object AccountHistory {
         owner: String,
         blockHeight: Long,
         txn: Int
-    ): T {
+    ): T? {
         val jsonRecord = RPC.getValue<JsonObject>(
             RPCMethod.GET_ACCOUNT_HISTORY,
             JsonPrimitive(owner),
             JsonPrimitive(blockHeight),
             JsonPrimitive(txn)
         )
+        if (jsonRecord.isEmpty()) {
+            return null
+        }
 
         try {
             val record = decoder.decodeFromJsonElement<T>(jsonRecord)

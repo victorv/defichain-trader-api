@@ -151,7 +151,7 @@ private suspend fun indexZMQPair(
         dbTX.insertPoolSwap(txRowID, swap)
     } else if (customTX.isAddPoolLiquidity()) {
         val addPoolLiquidity = customTX.asAddPoolLiquidity()
-        val shares = AccountHistory.getPoolLiquidityShares(addPoolLiquidity.owner, block.height, txn)
+        val shares = AccountHistory.getPoolLiquidityShares(addPoolLiquidity, block.height, txn)
         dbTX.addPoolLiquidity(txRowID, addPoolLiquidity, shares)
     } else if (customTX.isRemovePoolLiquidity()) {
         val removePoolLiquidity = customTX.asRemovePoolLiquidity()
