@@ -14,7 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.CoroutineContext
 
-private val semaphore = Semaphore(1)
+private val semaphore = Semaphore(6)
 private val dispatcher = newSingleThreadContext("ZMQBatchIndexer")
 private val logger = LoggerFactory.getLogger("ZMQBatchIndexer")
 private val dbUpdater = initialDatabaseUpdater
@@ -151,7 +151,7 @@ private suspend fun indexZMQPair(
         dbTX.insertPoolSwap(txRowID, swap)
     } else if (customTX.isAddPoolLiquidity()) {
         val addPoolLiquidity = customTX.asAddPoolLiquidity()
-        val shares = AccountHistory.getPoolLiquidityShares(addPoolLiquidity.owner, block.height, txn)
+        val shares = AccountHistory.getPoolLiquidityShares(addPoolLiquidity, block.height, txn)
         dbTX.addPoolLiquidity(txRowID, addPoolLiquidity, shares)
     } else if (customTX.isRemovePoolLiquidity()) {
         val removePoolLiquidity = customTX.asRemovePoolLiquidity()

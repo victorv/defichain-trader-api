@@ -6,7 +6,14 @@ import kotlin.math.absoluteValue
 private val template_insertPoolSwap = """
     INSERT INTO pool_swap (tx_row_id, "from", "to", token_from, token_to, amount_from, amount_to, max_price) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(tx_row_id) DO UPDATE set amount_to = coalesce(?, pool_swap.amount_to)
+    ON CONFLICT(tx_row_id) DO UPDATE SET 
+    "from" = ?,
+    "to" = ?,
+    token_from = ?,
+    token_to = ?,
+    amount_from = ?,
+    amount_to = ?,
+    max_price = ?
     """.trimIndent()
 
 fun DBTX.insertPoolSwap(txRowID: Long, swap: CustomTX.PoolSwap) {
@@ -25,7 +32,15 @@ fun DBTX.insertPoolSwap(txRowID: Long, swap: CustomTX.PoolSwap) {
         it.setDouble(6, swap.fromAmount.absoluteValue)
         it.setDoubleOrNull(7, swap.amountTo)
         it.setDouble(8, swap.maxPrice)
-        it.setDoubleOrNull(9, swap.amountTo)
+
+        it.setLong(9, fromRowID)
+        it.setLong(10, toRowID)
+        it.setInt(11, swap.fromToken)
+        it.setInt(12, swap.toToken)
+        it.setDouble(13, swap.fromAmount.absoluteValue)
+        it.setDoubleOrNull(14, swap.amountTo)
+        it.setDouble(15, swap.maxPrice)
+
         check(it.executeUpdate() == 1)
     }
 }
