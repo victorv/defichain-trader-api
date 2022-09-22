@@ -14,7 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.CoroutineContext
 
-private val semaphore = Semaphore(1)
+private val semaphore = Semaphore(6)
 private val dispatcher = newSingleThreadContext("ZMQBatchIndexer")
 private val logger = LoggerFactory.getLogger("ZMQBatchIndexer")
 private val dbUpdater = initialDatabaseUpdater
