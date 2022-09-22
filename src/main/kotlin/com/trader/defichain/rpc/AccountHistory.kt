@@ -61,6 +61,10 @@ object AccountHistory {
     }
 
     suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): Double {
+        if(poolSwap.toAddress == "") {
+            return 0.0
+        }
+
         val amounts = getPoolSwapAmounts(poolSwap.fromAddress, blockHeight, txn).toMutableList()
         if (amounts.isEmpty()) {
             return Double.MIN_VALUE
