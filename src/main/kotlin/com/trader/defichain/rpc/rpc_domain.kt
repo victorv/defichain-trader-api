@@ -54,9 +54,9 @@ enum class RPCMethod(val id: String) {
     LIST_POOL_PAIRS("listpoolpairs"),
     LIST_TOKENS("listtokens"),
     LIST_PRICES("listprices"),
-    GET_BEST_BLOCK_HASH("getbestblockhash"),
     GET_BLOCK("getblock"),
     GET_ACCOUNT_HISTORY("getaccounthistory"),
     DECODE_CUSTOM_TX("decodecustomtx"),
-    GET_RAW_TRANSACTION("getrawtransaction");
+    GET_RAW_TRANSACTION("getrawtransaction"),
+    GET_BLOCK_HASH("getblockhash");
 }

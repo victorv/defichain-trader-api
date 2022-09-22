@@ -1,7 +1,14 @@
 package com.trader.defichain.rpc
 
 import com.trader.defichain.indexer.TokenIndex
+import com.trader.defichain.util.err
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+
+private val decoder = Json { ignoreUnknownKeys = true }
 
 object AccountHistory {
 
@@ -41,37 +48,57 @@ object AccountHistory {
 
         val firstAmount = amounts.first()
 
-        check(
-            firstAmount.amount < 0.0
-                    && -firstAmount.amount == poolSwap.fromAmount
-                    && firstAmount.tokenID == poolSwap.fromToken
-        )
+        if (poolSwap.fromToken != poolSwap.toToken) {
+            check(
+                firstAmount.amount < 0.0
+                        && -firstAmount.amount == poolSwap.fromAmount
+                        && firstAmount.tokenID == poolSwap.fromToken
+            ) {
+                err(
+                    "firstAmount" to firstAmount,
+                    "poolSwap" to poolSwap,
+                )
+            }
+        }
 
         if (poolSwap.fromAddress != poolSwap.toAddress) {
-            check(amounts.size == 1)
+            check(amounts.size == 1) {
+                err("amounts" to amounts)
+            }
             amounts += getPoolSwapAmounts(poolSwap.toAddress, blockHeight, txn)
-            check(amounts.size <= 2)
+            check(amounts.size <= 2) {
+                err("amounts" to amounts)
+            }
         }
 
         if (amounts.size == 1) {
+            if (poolSwap.fromToken == poolSwap.toToken) {
+                return poolSwap.fromAmount + firstAmount.amount
+            }
             return 0.0
         }
 
         val lastAmount = amounts.last()
-        check(amounts.size == 2 && lastAmount.amount >= 0.0 && lastAmount.tokenID == poolSwap.toToken)
+        check(amounts.size == 2 && lastAmount.amount >= 0.0 && lastAmount.tokenID == poolSwap.toToken) {
+            err(
+                "amounts" to amounts,
+                "lastAmount" to lastAmount,
+                "poolSwap" to poolSwap
+            )
+        }
         return lastAmount.amount
     }
 
     private suspend fun getPoolSwapAmounts(owner: String, blockHeight: Long, txn: Int): List<TokenIndex.TokenAmount> {
         val swap = getRecord<PoolSwap>(owner, blockHeight, txn)
 
-        check(swap.type == "PoolSwap")
+        check(swap.type == "PoolSwap") { err("poolSwap" to swap) }
 
         val amounts = swap.amounts.map {
             TokenIndex.decodeTokenAmount(it)
         }.sortedBy { it.amount }
 
-        check(amounts.size in 1..2)
+        check(amounts.size in 1..2) { err("amounts" to amounts) }
         return amounts
     }
 
@@ -80,17 +107,24 @@ object AccountHistory {
         blockHeight: Long,
         txn: Int
     ): T {
-        val record = RPC.getValue<T>(
+        val jsonRecord = RPC.getValue<JsonObject>(
             RPCMethod.GET_ACCOUNT_HISTORY,
             JsonPrimitive(owner),
             JsonPrimitive(blockHeight),
             JsonPrimitive(txn)
         )
 
-        check(record.owner == owner)
-        check(record.blockHeight == blockHeight)
-        check(record.txn == txn)
-        return record
+        try {
+            val record = decoder.decodeFromJsonElement<T>(jsonRecord)
+
+            check(record.owner == owner) { err("record" to record, "owner" to owner) }
+            check(record.blockHeight == blockHeight) { err("record" to record, "blockHeight" to blockHeight) }
+            check(record.txn == txn) { err("record" to record, "txn" to txn) }
+
+            return record
+        } catch (e: SerializationException) {
+            throw RuntimeException("Invalid record $jsonRecord for (owner=$owner, blockHeight=$blockHeight, txn=$txn) ", e)
+        }
     }
 
     data class PoolLiquidityAmounts(

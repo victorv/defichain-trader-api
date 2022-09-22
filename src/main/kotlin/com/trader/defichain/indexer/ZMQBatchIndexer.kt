@@ -14,7 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.CoroutineContext
 
-private val semaphore = Semaphore(6)
+private val semaphore = Semaphore(1)
 private val dispatcher = newSingleThreadContext("ZMQBatchIndexer")
 private val logger = LoggerFactory.getLogger("ZMQBatchIndexer")
 private val dbUpdater = initialDatabaseUpdater
@@ -25,21 +25,30 @@ suspend fun announceZMQBatch(zmqBatch: ZMQBatch) {
 }
 
 suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
-    var blockHash = RPC.getValue<String>(RPCMethod.GET_BEST_BLOCK_HASH)
+    var missingBlocks = listOf<Int>().iterator()
 
     while (coroutineContext.isActive) {
         do {
             while (zmqBatchChannel.isEmpty) {
-                var block: Block? = null
+
+
+                var blockHeight = -500
                 try {
-                    block = RPC.getValue(RPCMethod.GET_BLOCK, JsonPrimitive(blockHash), JsonPrimitive(2))
-                    blockHash = indexZMQBatches(block!!)
+                    if (!missingBlocks.hasNext()) {
+                        missingBlocks = DB.selectAll<Int>("missing_blocks").iterator()
+                    }
+
+                    blockHeight = missingBlocks.next()
+
+                    val blockHash = RPC.getValue<String>(RPCMethod.GET_BLOCK_HASH, JsonPrimitive(blockHeight))
+                    val block = RPC.getValue<Block>(RPCMethod.GET_BLOCK, JsonPrimitive(blockHash), JsonPrimitive(2))
+                    indexZMQBatches(block)
+                    logger.info("Indexed missing block at block height ${block.height}")
                 } catch (e: Throwable) {
                     logger.error(
-                        "Failed to process old block with hash $blockHash; skipping block and suspending processing until the next ZMQ batch is available",
+                        "Failed to process missing block at height $blockHeight; skipping block and suspending processing until the next ZMQ batch is available",
                         e
                     )
-                    blockHash = block?.previousBlockHash ?: blockHash
                     break
                 }
             }
@@ -70,7 +79,7 @@ private val whitelistedTXTypes = setOf(
 
 private suspend fun indexZMQBatches(
     block: Block,
-): String {
+) {
     dbUpdater.doTransaction { dbTX ->
         indexBlock(
             dbTX,
@@ -81,8 +90,6 @@ private suspend fun indexZMQBatches(
             )
         )
     }
-    logger.info("Indexed old block at block height ${block.height}")
-    return block.previousBlockHash ?: RPC.getValue(RPCMethod.GET_BEST_BLOCK_HASH)
 }
 
 private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
@@ -92,7 +99,11 @@ private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
         zmqBatch.tx.map { zmqPair ->
             async {
                 semaphore.withPermit {
-                    indexZMQPair(zmqPair, zmqBatch, dbTX)
+                    try {
+                        indexZMQPair(zmqPair, zmqBatch, dbTX)
+                    } catch (e: Throwable) {
+                        throw RuntimeException("Failed to process $zmqPair", e)
+                    }
                 }
             }
         }.awaitAll()
