@@ -26,8 +26,9 @@ RETURNING row_id;
 """
 
 private const val template_insertTX = """
-INSERT INTO tx (dc_tx_id, tx_type_row_id) VALUES (?, ?)
-ON CONFLICT (dc_tx_id) DO UPDATE SET dc_tx_id = tx.dc_tx_id
+INSERT INTO tx (dc_tx_id, tx_type_row_id, confirmed) VALUES (?, ?, ?)
+ON CONFLICT (dc_tx_id) DO UPDATE SET 
+confirmed = ?
 RETURNING row_id;
 """
 
@@ -60,7 +61,7 @@ fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater 
     }
 }
 
-fun DBTX.insertTX(txID: String, txType: String): Future<Long> {
+fun DBTX.insertTX(txID: String, txType: String, isConfirmed: Boolean): Future<Long> {
     val rowID = Future<Long>()
 
     doLater {
@@ -69,6 +70,8 @@ fun DBTX.insertTX(txID: String, txType: String): Future<Long> {
         connection.prepareStatement(template_insertTX).use {
             it.setString(1, txID)
             it.setInt(2, txTypeRowID)
+            it.setBoolean(3, isConfirmed)
+            it.setBoolean(4, isConfirmed)
             rowID.set(upsertReturning(it))
         }
     }
