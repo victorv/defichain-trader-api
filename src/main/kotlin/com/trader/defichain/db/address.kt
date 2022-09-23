@@ -9,7 +9,7 @@ private val template_insertAddress = """
 fun DBTX.insertAddress(
     address: String,
 ): Long {
-    dbUpdater.prepareStatement(template_insertAddress).use {
+    connection.prepareStatement(template_insertAddress).use {
         it.setString(1, address)
         return upsertReturning(it)
     }

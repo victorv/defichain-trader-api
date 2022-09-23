@@ -18,7 +18,7 @@ object AccountHistory {
         txn: Int
     ): TokenIndex.TokenAmount {
         val record = getRecord<PoolLiquidity>(addPoolLiquidity.owner, blockHeight, txn)
-        if(record != null) {
+        if (record != null) {
             val shares = record.amounts.first { it.split("@").last().indexOf("-") > 0 }
             return TokenIndex.decodeTokenAmount(shares)
         }
@@ -26,7 +26,7 @@ object AccountHistory {
         val poolID = TokenIndex.getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
         return TokenIndex.TokenAmount(
             tokenID = poolID,
-            amount = Double.MIN_VALUE,
+            amount = null,
         )
     }
 
@@ -42,35 +42,38 @@ object AccountHistory {
 
         val record = getRecord<PoolLiquidity>(owner, blockHeight, txn)
 
-        if(record != null) {
+        if (record != null) {
             val amountA = record.amounts
-                .first { it.endsWith(TokenIndex.getSymbol(idTokenA)) }
+                .firstOrNull { it.endsWith("@${TokenIndex.getSymbol(idTokenA)}") }
             val amountB = record.amounts
-                .first { it.endsWith(TokenIndex.getSymbol(idTokenB)) }
+                .firstOrNull { it.endsWith("@${TokenIndex.getSymbol(idTokenB)}") }
 
             return PoolLiquidityAmounts(
-                amountA = TokenIndex.decodeTokenAmount(amountA),
-                amountB = TokenIndex.decodeTokenAmount(amountB),
+                amountA = if (amountA != null) TokenIndex.decodeTokenAmount(amountA)
+                else TokenIndex.TokenAmount(idTokenA, null),
+                amountB = if (amountB != null) TokenIndex.decodeTokenAmount(amountB)
+                else TokenIndex.TokenAmount(idTokenB, null),
             )
         }
 
         return PoolLiquidityAmounts(
-            amountA = TokenIndex.TokenAmount(idTokenA, Double.MIN_VALUE),
-            amountB = TokenIndex.TokenAmount(idTokenB, Double.MIN_VALUE),
+            amountA = TokenIndex.TokenAmount(idTokenA, null),
+            amountB = TokenIndex.TokenAmount(idTokenB, null),
         )
     }
 
-    suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): Double {
-        if(poolSwap.toAddress == "") {
-            return 0.0
+    suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): Double? {
+        if (poolSwap.toAddress == "") {
+            return null
         }
 
         val amounts = getPoolSwapAmounts(poolSwap.fromAddress, blockHeight, txn).toMutableList()
         if (amounts.isEmpty()) {
-            return Double.MIN_VALUE
+            return null
         }
 
         val firstAmount = amounts.first()
+        check(firstAmount.amount != null)
 
         if (poolSwap.fromToken != poolSwap.toToken) {
             check(
@@ -96,17 +99,18 @@ object AccountHistory {
         }
 
         if (amounts.isEmpty()) {
-            return Double.MIN_VALUE
+            return null
         }
 
         if (amounts.size == 1) {
             if (poolSwap.fromToken == poolSwap.toToken) {
                 return poolSwap.fromAmount + firstAmount.amount
             }
-            return 0.0
+            return null
         }
 
         val lastAmount = amounts.last()
+        check(lastAmount.amount != null)
         check(amounts.size == 2 && lastAmount.amount >= 0.0 && lastAmount.tokenID == poolSwap.toToken) {
             err(
                 "amounts" to amounts,
@@ -154,7 +158,10 @@ object AccountHistory {
 
             return record
         } catch (e: SerializationException) {
-            throw RuntimeException("Invalid record $jsonRecord for (owner=$owner, blockHeight=$blockHeight, txn=$txn) ", e)
+            throw RuntimeException(
+                "Invalid record $jsonRecord for (owner=$owner, blockHeight=$blockHeight, txn=$txn) ",
+                e
+            )
         }
     }
 

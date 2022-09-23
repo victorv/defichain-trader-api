@@ -8,3 +8,13 @@ fun err(vararg context: Pair<String, Any>): String {
     }
     return builder.toString()
 }
+
+class Future<T> {
+
+    private var v: T? = null
+    fun set(v: T) {
+        this.v = v
+    }
+
+    fun get(): T = v!!
+}

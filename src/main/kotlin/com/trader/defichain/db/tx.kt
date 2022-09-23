@@ -2,6 +2,7 @@ package com.trader.defichain.db
 
 import com.trader.defichain.indexer.ZMQRawTX
 import com.trader.defichain.rpc.Block
+import com.trader.defichain.util.Future
 
 private const val template_insertBlock = """
 INSERT INTO block (height, time, hash) VALUES (?, ?, ?)
@@ -30,8 +31,8 @@ ON CONFLICT (dc_tx_id) DO UPDATE SET dc_tx_id = tx.dc_tx_id
 RETURNING row_id;
 """
 
-fun DBTX.insertBlock(block: Block) {
-    dbUpdater.prepareStatement(template_insertBlock).use {
+fun DBTX.insertBlock(block: Block) = doLater {
+    connection.prepareStatement(template_insertBlock).use {
         it.setLong(1, block.height)
         it.setLong(2, block.time)
         it.setString(3, block.hash)
@@ -39,9 +40,9 @@ fun DBTX.insertBlock(block: Block) {
     }
 }
 
-fun DBTX.insertRawTX(txRowID: Long, tx: ZMQRawTX) {
-    dbUpdater.prepareStatement(template_insertMempoolTX).use {
-        it.setLong(1, txRowID)
+fun DBTX.insertRawTX(txRowID: Future<Long>, tx: ZMQRawTX) = doLater {
+    connection.prepareStatement(template_insertMempoolTX).use {
+        it.setLong(1, txRowID.get())
         it.setLong(2, tx.time)
         it.setLong(3, tx.blockHeight)
         it.setInt(4, tx.txn)
@@ -49,9 +50,9 @@ fun DBTX.insertRawTX(txRowID: Long, tx: ZMQRawTX) {
     }
 }
 
-fun DBTX.insertMintedTX(txRowID: Long, mintedTX: DB.MintedTX) {
-    dbUpdater.prepareStatement(template_insertMintedTX).use {
-        it.setLong(1, txRowID)
+fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater {
+    connection.prepareStatement(template_insertMintedTX).use {
+        it.setLong(1, txRowID.get())
         it.setLong(2, mintedTX.blockHeight)
         it.setInt(3, mintedTX.txn)
         it.setBigDecimal(4, mintedTX.txFee)
@@ -59,18 +60,23 @@ fun DBTX.insertMintedTX(txRowID: Long, mintedTX: DB.MintedTX) {
     }
 }
 
-fun DBTX.insertTX(txID: String, txType: String): Long {
-    val txTypeRowID = insertTransactionType(txType)
+fun DBTX.insertTX(txID: String, txType: String): Future<Long> {
+    val rowID = Future<Long>()
 
-    dbUpdater.prepareStatement(template_insertTX).use {
-        it.setString(1, txID)
-        it.setInt(2, txTypeRowID)
-        return upsertReturning(it)
+    doLater {
+        val txTypeRowID = insertTransactionType(txType)
+
+        connection.prepareStatement(template_insertTX).use {
+            it.setString(1, txID)
+            it.setInt(2, txTypeRowID)
+            rowID.set(upsertReturning(it))
+        }
     }
+    return rowID
 }
 
 private fun DBTX.insertTransactionType(txType: String): Int {
-    dbUpdater.prepareStatement(template_insertTXType).use {
+    connection.prepareStatement(template_insertTXType).use {
         it.setString(1, txType)
         return upsertReturning(it).toInt()
     }

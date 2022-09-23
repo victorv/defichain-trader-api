@@ -33,11 +33,12 @@ object TokenIndex {
 
     data class TokenAmount(
         val tokenID: Int,
-        val amount: Double,
+        val amount: Double?,
     )
 }
 
-suspend fun indexTokens(dbTX: DBTX) {
+suspend fun DBTX.indexTokens() {
+
     poolPairs.putAll(RPC.listPoolPairs().entries.associate {
         it.key.toInt() to it.value
     })
@@ -62,8 +63,10 @@ suspend fun indexTokens(dbTX: DBTX) {
     }
 
     if (tokenChanges.isNotEmpty()) {
-        logger.info("Indexing tokens $tokenChanges")
-        dbTX.insertTokens(*tokenChanges.keys.toIntArray())
+        doLater {
+            logger.info("Indexing tokens $tokenChanges")
+            insertTokens(*tokenChanges.keys.toTypedArray())
+        }
     }
 }
 
