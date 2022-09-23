@@ -79,14 +79,14 @@ private fun createConnectionPool(): PGSimpleDataSource {
     return connectionPool
 }
 
-private fun createWriteableConnection(): Connection {
+fun createWriteableConnection(): Connection {
     val connection = connectionPool.connection
     connection.autoCommit = false
     connection.isReadOnly = false
     return connection
 }
 
-private fun useOrReplace(connection: Connection): Connection {
+fun useOrReplace(connection: Connection): Connection {
     if (!connection.isValid(1000)) {
         logger.warn("Connection $connection is no longer valid and will be replaced")
         try {
@@ -121,8 +121,6 @@ fun PreparedStatement.setDoubleOrNull(parameterIndex: Int, double: Double?) {
     if (double == null) setNull(parameterIndex, Types.DOUBLE)
     else setDouble(parameterIndex, double)
 }
-
-class DBTX(val dbUpdater: DB.Updater)
 
 object DB {
 
@@ -264,31 +262,6 @@ object DB {
         timeReceived = resultSet.getLong(14),
         feeReceived = resultSet.getBigDecimal(15)?.floorPlain(),
     )
-
-    fun createUpdater() = Updater(createWriteableConnection())
-    data class Updater(
-        var connection: Connection,
-    ) {
-        fun prepareStatement(sql: String): PreparedStatement {
-            connection = useOrReplace(connection)
-            return connection.prepareStatement(sql)
-        }
-
-        inline fun <reified T> doTransaction(run: (dbTX: DBTX) -> T): T {
-            try {
-                val result = run(DBTX(this))
-                connection.commit()
-                return result
-            } catch (t: Throwable) {
-                try {
-                    connection.rollback()
-                } catch (rollbackException: Throwable) {
-                    t.addSuppressed(rollbackException)
-                }
-                throw t
-            }
-        }
-    }
 
     private class Conditions {
 

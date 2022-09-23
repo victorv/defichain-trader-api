@@ -1,6 +1,7 @@
 package com.trader.defichain.db
 
 import com.trader.defichain.rpc.CustomTX
+import com.trader.defichain.util.Future
 import kotlin.math.absoluteValue
 
 private val template_insertPoolSwap = """
@@ -16,15 +17,15 @@ private val template_insertPoolSwap = """
     max_price = ?
     """.trimIndent()
 
-fun DBTX.insertPoolSwap(txRowID: Long, swap: CustomTX.PoolSwap) {
+fun DBTX.insertPoolSwap(txRowID: Future<Long>, swap: CustomTX.PoolSwap) = doLater {
     insertTokens(swap.fromToken)
     insertTokens(swap.toToken)
 
     val fromRowID = insertAddress(swap.fromAddress)
     val toRowID = insertAddress(swap.toAddress)
 
-    dbUpdater.prepareStatement(template_insertPoolSwap).use {
-        it.setLong(1, txRowID)
+    connection.prepareStatement(template_insertPoolSwap).use {
+        it.setLong(1, txRowID.get())
         it.setLong(2, fromRowID)
         it.setLong(3, toRowID)
         it.setInt(4, swap.fromToken)

@@ -17,7 +17,6 @@ import kotlin.coroutines.CoroutineContext
 private val semaphore = Semaphore(6)
 private val dispatcher = newSingleThreadContext("ZMQBatchIndexer")
 private val logger = LoggerFactory.getLogger("ZMQBatchIndexer")
-private val dbUpdater = initialDatabaseUpdater
 private val zmqBatchChannel = Channel<ZMQBatch>(20, BufferOverflow.DROP_OLDEST)
 
 suspend fun announceZMQBatch(zmqBatch: ZMQBatch) {
@@ -30,8 +29,6 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
     while (coroutineContext.isActive) {
         do {
             while (zmqBatchChannel.isEmpty) {
-
-
                 var blockHeight = -500
                 try {
                     if (!missingBlocks.hasNext()) {
@@ -42,7 +39,11 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
 
                     val blockHash = RPC.getValue<String>(RPCMethod.GET_BLOCK_HASH, JsonPrimitive(blockHeight))
                     val block = RPC.getValue<Block>(RPCMethod.GET_BLOCK, JsonPrimitive(blockHash), JsonPrimitive(2))
-                    indexZMQBatches(block)
+
+                    val dbtx = DBTX("missing block at block height ${block.height}")
+                    indexZMQBatches(dbtx, block)
+                    dbtx.submit()
+
                     logger.info("Indexed missing block at block height ${block.height}")
                 } catch (e: Throwable) {
                     logger.error(
@@ -55,10 +56,11 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
 
             val zmqBatch = zmqBatchChannel.receive()
             try {
-                dbUpdater.doTransaction {
-                    indexTokens(it)
-                    indexBlock(it, zmqBatch)
-                }
+                val dbtx = DBTX("ZMQ batch at block height ${zmqBatch.block.height}")
+                dbtx.indexTokens()
+                indexBlock(dbtx, zmqBatch)
+                dbtx.submit()
+
                 logger.info("Indexed ZMQ batch at block height ${zmqBatch.block.height}")
             } catch (e: Throwable) {
                 logger.error(
@@ -78,18 +80,17 @@ private val whitelistedTXTypes = setOf(
 )
 
 private suspend fun indexZMQBatches(
+    dbtx: DBTX,
     block: Block,
 ) {
-    dbUpdater.doTransaction { dbTX ->
-        indexBlock(
-            dbTX,
-            ZMQBatch(
-                block = block,
-                tx = block.tx.map { tx -> ZMQPair(null, tx, true) },
-                txContext = emptyMap(),
-            )
+    indexBlock(
+        dbtx,
+        ZMQBatch(
+            block = block,
+            tx = block.tx.map { tx -> ZMQPair(null, tx, true) },
+            txContext = emptyMap(),
         )
-    }
+    )
 }
 
 private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
