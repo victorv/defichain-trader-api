@@ -16,30 +16,22 @@ object AccountHistory {
         addPoolLiquidity: CustomTX.AddPoolLiquidity,
         blockHeight: Long,
         txn: Int
-    ): TokenIndex.TokenAmount {
+    ): TokenIndex.TokenAmount? {
         val record = getRecord<PoolLiquidity>(addPoolLiquidity.owner, blockHeight, txn)
         if (record != null) {
             val shares = record.amounts.first { it.split("@").last().indexOf("-") > 0 }
             return TokenIndex.decodeTokenAmount(shares)
         }
-
-        val poolID = TokenIndex.getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
-        return TokenIndex.TokenAmount(
-            tokenID = poolID,
-            amount = null,
-        )
+        return null
     }
 
     suspend fun getPoolLiquidityAmounts(
         owner: String,
         blockHeight: Long,
         txn: Int,
-        poolID: Int,
+        idTokenA: Int,
+        idTokenB: Int,
     ): PoolLiquidityAmounts {
-        val pool = TokenIndex.getPoolPair(poolID)
-        val idTokenA = pool.idTokenA.toInt()
-        val idTokenB = pool.idTokenB.toInt()
-
         val record = getRecord<PoolLiquidity>(owner, blockHeight, txn)
 
         if (record != null) {

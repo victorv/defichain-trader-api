@@ -123,45 +123,67 @@ private suspend fun indexZMQPair(
     val customTX = RPC.decodeCustomTX(tx.hex!!) ?: return
     if (!whitelistedTXTypes.contains(customTX.type)) return
 
-    val txRowID = dbTX.insertTX(tx.txID, customTX.type)
+    val txRowID = dbTX.insertTX(tx.txID, customTX.type, zmqPair.isConfirmed)
 
     if (rawTX != null) {
         dbTX.insertRawTX(txRowID, rawTX)
     }
 
-    if (!zmqPair.isConfirmed) {
-        return
-    }
-
     val txn = tx.txn
-    val fee = calculateFee(tx, zmqBatch.txContext)
-    val mintedTX = DB.MintedTX(
-        txID = tx.txID,
-        type = customTX.type,
-        txFee = fee,
-        txn = txn,
-        blockHeight = block.height,
-        blockTime = block.time,
-    )
 
-    dbTX.insertMintedTX(txRowID, mintedTX)
+    if(zmqPair.isConfirmed) {
+        val fee = calculateFee(tx, zmqBatch.txContext)
+        val mintedTX = DB.MintedTX(
+            txID = tx.txID,
+            type = customTX.type,
+            txFee = fee,
+            txn = txn,
+            blockHeight = block.height,
+            blockTime = block.time,
+        )
+
+        dbTX.insertMintedTX(txRowID, mintedTX)
+    }
 
     if (customTX.isPoolSwap()) {
         val swap = customTX.asPoolSwap()
-        swap.amountTo = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
+
+        if (zmqPair.isConfirmed) {
+            swap.amountTo = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
+        }
+
         dbTX.insertPoolSwap(txRowID, swap)
     } else if (customTX.isAddPoolLiquidity()) {
         val addPoolLiquidity = customTX.asAddPoolLiquidity()
-        val shares = AccountHistory.getPoolLiquidityShares(addPoolLiquidity, block.height, txn)
+
+        val poolID = TokenIndex.getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
+        val sharesUnknown = TokenIndex.TokenAmount(
+            tokenID = poolID,
+            amount = null,
+        )
+
+        val shares = if (zmqPair.isConfirmed)
+            AccountHistory.getPoolLiquidityShares(addPoolLiquidity, block.height, txn) ?: sharesUnknown
+        else sharesUnknown
+
         dbTX.addPoolLiquidity(txRowID, addPoolLiquidity, shares)
     } else if (customTX.isRemovePoolLiquidity()) {
         val removePoolLiquidity = customTX.asRemovePoolLiquidity()
-        val amounts = AccountHistory.getPoolLiquidityAmounts(
+        val pool = TokenIndex.getPoolPair(removePoolLiquidity.poolID)
+        val idTokenA = pool.idTokenA.toInt()
+        val idTokenB = pool.idTokenB.toInt()
+
+        val amounts = if (zmqPair.isConfirmed) AccountHistory.getPoolLiquidityAmounts(
             removePoolLiquidity.owner,
             block.height,
             txn,
-            removePoolLiquidity.poolID
+            idTokenA,
+            idTokenB
+        ) else AccountHistory.PoolLiquidityAmounts(
+            amountA = TokenIndex.TokenAmount(idTokenA, null),
+            amountB = TokenIndex.TokenAmount(idTokenB, null),
         )
+
         dbTX.removePoolLiquidity(txRowID, removePoolLiquidity, amounts)
     }
 }
