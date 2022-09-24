@@ -58,5 +58,6 @@ enum class RPCMethod(val id: String) {
     GET_ACCOUNT_HISTORY("getaccounthistory"),
     DECODE_CUSTOM_TX("decodecustomtx"),
     GET_RAW_TRANSACTION("getrawtransaction"),
-    GET_BLOCK_HASH("getblockhash");
+    GET_BLOCK_HASH("getblockhash"),
+    GET_VAULT("getvault");
 }

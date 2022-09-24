@@ -1,37 +1,15 @@
 package com.trader.defichain.rpc
 
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.double
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
 
 private val numberMatcher = "^\\d+$".toRegex()
 
+private fun decodeAmount(amount: String): Pair<Double, Int> {
+    val (amountString, tokenIDString) = amount.split("@")
+    return Pair(amountString.toDouble(), tokenIDString.toInt())
+}
+
 object CustomTX {
-
-    data class PoolSwap(
-        val fromAddress: String,
-        val toAddress: String,
-        val fromToken: Int,
-        val toToken: Int,
-        val fromAmount: Double,
-        val maxPrice: Double,
-        var amountTo: Double? = null,
-    )
-
-    data class AddPoolLiquidity(
-        val amountA: Double,
-        val amountB: Double,
-        val tokenA: Int,
-        val tokenB: Int,
-        val owner: String,
-    )
-
-    data class RemovePoolLiquidity(
-        val poolID: Int,
-        val shares: Double,
-        val owner: String,
-    )
 
     @kotlinx.serialization.Serializable
     data class Record(
@@ -42,6 +20,11 @@ object CustomTX {
         fun isPoolSwap() = type == "PoolSwap"
         fun isAddPoolLiquidity() = type == "AddPoolLiquidity"
         fun isRemovePoolLiquidity() = type == "RemovePoolLiquidity"
+        fun isDepositToVault() = type == "DepositToVault"
+        fun isWithdrawFromVault() = type == "WithdrawFromVault"
+        fun isTakeLoan() = type == "TakeLoan"
+        fun isPaybackLoan() = type == "PaybackLoan"
+        fun isAuctionBid() = type == "AuctionBid"
 
         fun asPoolSwap() = PoolSwap(
             fromAddress = results.getValue("fromAddress").jsonPrimitive.content,
@@ -87,6 +70,136 @@ object CustomTX {
                 poolID = poolID.toInt(),
                 shares = -nAmount,
             )
+        }
+
+        private fun getAmounts(results: JsonObject): List<Pair<Double, Int>> {
+            if (results.containsKey("amount")) {
+                val amount = results.getValue("amount").jsonPrimitive.content
+                return listOf(decodeAmount(amount))
+            }
+
+            if (results.containsKey("dToken")) {
+                val amountEntries = results.getValue("dToken").jsonArray
+                val amounts = ArrayList<Pair<Double, Int>>()
+                for (entry in amountEntries) {
+                    val entryObject = entry as JsonObject
+                    val dTokens = entryObject.getValue("dTokens").jsonPrimitive.content
+                    val amount = entryObject.getValue(dTokens).jsonPrimitive.content
+                    amounts.add(Pair(amount.toDouble(), dTokens.toInt()))
+                }
+                return amounts
+            }
+
+            val amount = results.entries.first { numberMatcher.matches(it.key) }
+            return listOf(Pair(amount.value.jsonPrimitive.content.toDouble(), amount.key.toInt()))
+        }
+
+        fun asDepositToVault() = DepositToVault(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            from = results.getValue("from").jsonPrimitive.content,
+            amounts = getAmounts(results).map { Pair(-it.first, it.second) },
+        )
+
+        fun asWithdrawFromVault() = WithdrawFromVault(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            to = results.getOrDefault("to", JsonPrimitive("")).jsonPrimitive.content,
+            amounts = getAmounts(results),
+        )
+
+        fun asTakeLoan() = TakeLoan(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            to = results.getOrDefault("to", JsonPrimitive("")).jsonPrimitive.content,
+            amounts = getAmounts(results),
+        )
+
+        fun asPaybackLoan() = PaybackLoan(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            from = results.getValue("from").jsonPrimitive.content,
+            amounts = getAmounts(results).map { Pair(-it.first, it.second) }
+        )
+
+        fun asAuctionBid() = AuctionBid(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            from = results.getValue("from").jsonPrimitive.content,
+            amount = results.getValue("amount").jsonPrimitive.content,
+            index = results.getValue("index").jsonPrimitive.int
+        )
+    }
+
+    data class PoolSwap(
+        val fromAddress: String,
+        val toAddress: String,
+        val fromToken: Int,
+        val toToken: Int,
+        val fromAmount: Double,
+        val maxPrice: Double,
+        var amountTo: Double? = null,
+    )
+
+    data class AddPoolLiquidity(
+        val amountA: Double,
+        val amountB: Double,
+        val tokenA: Int,
+        val tokenB: Int,
+        val owner: String,
+    )
+
+    data class RemovePoolLiquidity(
+        val poolID: Int,
+        val shares: Double,
+        val owner: String,
+    )
+
+    interface CollateralOrLoan {
+        val vaultID: String
+        val amounts: List<Pair<Double, Int>>
+        fun owner(): String
+    }
+
+    data class DepositToVault(
+        override val vaultID: String,
+        override val amounts: List<Pair<Double, Int>>,
+        val from: String,
+    ) : CollateralOrLoan {
+
+        override fun owner() = from
+    }
+
+    data class WithdrawFromVault(
+        override val vaultID: String,
+        override val amounts: List<Pair<Double, Int>>,
+        val to: String,
+    ) : CollateralOrLoan {
+
+        override fun owner() = to
+    }
+
+    data class TakeLoan(
+        override val vaultID: String,
+        override val amounts: List<Pair<Double, Int>>,
+        val to: String,
+    ) : CollateralOrLoan {
+
+        override fun owner() = to
+    }
+
+    data class PaybackLoan(
+        override val vaultID: String,
+        override val amounts: List<Pair<Double, Int>>,
+        val from: String,
+    ) : CollateralOrLoan {
+
+        override fun owner() = from
+    }
+
+    data class AuctionBid(
+        val vaultID: String,
+        val amount: String,
+        val from: String,
+        val index: Int,
+    ) {
+        fun amount(): Pair<Double, Int> {
+            return decodeAmount(amount)
         }
     }
 }
