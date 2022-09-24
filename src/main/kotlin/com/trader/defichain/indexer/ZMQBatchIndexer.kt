@@ -1,5 +1,6 @@
 package com.trader.defichain.indexer
 
+import auctionBid
 import com.trader.defichain.db.*
 import com.trader.defichain.rpc.*
 import kotlinx.coroutines.*
@@ -76,6 +77,9 @@ private val whitelistedTXTypes = setOf(
     "RemovePoolLiquidity",
     "DepositToVault",
     "WithdrawFromVault",
+    "TakeLoan",
+    "PaybackLoan",
+    "AuctionBid",
 )
 
 private suspend fun indexZMQBatches(
@@ -185,13 +189,14 @@ private suspend fun indexZMQPair(
 
         dbTX.removePoolLiquidity(txRowID, removePoolLiquidity, amounts)
     } else if (customTX.isDepositToVault()) {
-        val depositToVault = customTX.asDepositToVault()
-
-        dbTX.depositToOrWithdrawFromVault(txRowID, depositToVault)
+        dbTX.storeLoanOrCollateral(txRowID, "collateral", customTX.asDepositToVault())
     } else if (customTX.isWithdrawFromVault()) {
-        val withdrawFromVault = customTX.asWithdrawFromVault()
-
-
-        dbTX.depositToOrWithdrawFromVault(txRowID, withdrawFromVault)
+        dbTX.storeLoanOrCollateral(txRowID, "collateral", customTX.asWithdrawFromVault())
+    } else if (customTX.isTakeLoan()) {
+        dbTX.storeLoanOrCollateral(txRowID, "loan", customTX.asTakeLoan())
+    } else if (customTX.isPaybackLoan()) {
+        dbTX.storeLoanOrCollateral(txRowID, "loan", customTX.asPaybackLoan())
+    } else if (customTX.isAuctionBid()) {
+        dbTX.auctionBid(txRowID, customTX.asAuctionBid())
     }
 }
