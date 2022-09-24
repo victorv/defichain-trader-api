@@ -42,8 +42,7 @@ group by token.dc_token_symbol;
 private val template_selectPoolSwaps = """
     select tx.dc_tx_id as tx_id,
     minted_tx.block_height, 
-    minted_tx.block_time, 
-    minted_tx.ordinal, 
+    minted_tx.txn, 
     minted_tx.fee, 
     amount_from, 
     amount_to, 
@@ -52,9 +51,9 @@ private val template_selectPoolSwaps = """
     max_price,
     af.dc_address as "from",
     at.dc_address as "to",
-    block_height_received,
-    time_received,
-    mempool.fee as fee_received
+    mempool.block_height,
+    mempool.time,
+    mempool.txn
     from pool_swap 
     inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     inner join token tf on tf.dc_token_id=token_from 
@@ -64,7 +63,7 @@ private val template_selectPoolSwaps = """
     inner join tx on tx.row_id = pool_swap.tx_row_id
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
     where 1=1
-    order by block_height DESC,ordinal
+    order by minted_tx.block_height DESC,minted_tx.txn
     limit 100;
 """.trimIndent()
 
@@ -207,7 +206,6 @@ object DB {
             .sortedWith(
                 compareByDescending<PoolSwapRow> { it.blockHeight ?: ((it.blockHeightReceived ?: 0) + 1) }
                     .thenBy { it.ordinal ?: 0 }
-                    .thenByDescending { (it.fee ?: it.feeReceived)?.toDouble() }
             )
     }
 
@@ -248,19 +246,18 @@ object DB {
     private fun getPoolSwapRow(resultSet: ResultSet) = PoolSwapRow(
         txID = resultSet.getString(1),
         blockHeight = resultSet.getLong(2),
-        blockTime = resultSet.getLong(3),
-        ordinal = resultSet.getInt(4),
-        fee = resultSet.getBigDecimal(5)?.floorPlain(),
-        amountFrom = resultSet.getBigDecimal(6).floorPlain(),
-        amountTo = resultSet.getBigDecimal(7).floorPlain(),
-        tokenFrom = resultSet.getString(8),
-        tokenTo = resultSet.getString(9),
-        maxPrice = resultSet.getBigDecimal(10).floorPlain(),
-        from = resultSet.getString(11),
-        to = resultSet.getString(12),
-        blockHeightReceived = resultSet.getInt(13),
-        timeReceived = resultSet.getLong(14),
-        feeReceived = resultSet.getBigDecimal(15)?.floorPlain(),
+        ordinal = resultSet.getInt(3),
+        fee = resultSet.getBigDecimal(4)?.floorPlain(),
+        amountFrom = resultSet.getBigDecimal(5).floorPlain(),
+        amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
+        tokenFrom = resultSet.getString(7),
+        tokenTo = resultSet.getString(8),
+        maxPrice = resultSet.getBigDecimal(9).floorPlain(),
+        from = resultSet.getString(10),
+        to = resultSet.getString(11),
+        blockHeightReceived = resultSet.getObject(12) as Int,
+        timeReceived = resultSet.getObject(13) as Long,
+        txnReceived = resultSet.getObject(14) as Int,
     )
 
     private class Conditions {
@@ -344,11 +341,10 @@ object DB {
     data class PoolSwapRow(
         val txID: String,
         val blockHeight: Long?,
-        val blockTime: Long?,
         val ordinal: Int?,
         val fee: String?,
         val amountFrom: String,
-        val amountTo: String,
+        val amountTo: String?,
         val tokenFrom: String,
         val tokenTo: String,
         val maxPrice: String,
@@ -356,7 +352,7 @@ object DB {
         val to: String,
         val blockHeightReceived: Int?,
         val timeReceived: Long?,
-        val feeReceived: String?,
+        val txnReceived: Int?,
     )
 
     @kotlinx.serialization.Serializable
