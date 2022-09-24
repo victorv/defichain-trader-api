@@ -1,10 +1,7 @@
 package com.trader.defichain.indexer
 
 import com.trader.defichain.db.*
-import com.trader.defichain.rpc.AccountHistory
-import com.trader.defichain.rpc.Block
-import com.trader.defichain.rpc.RPC
-import com.trader.defichain.rpc.RPCMethod
+import com.trader.defichain.rpc.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -77,6 +74,8 @@ private val whitelistedTXTypes = setOf(
     "PoolSwap",
     "AddPoolLiquidity",
     "RemovePoolLiquidity",
+    "DepositToVault",
+    "WithdrawFromVault",
 )
 
 private suspend fun indexZMQBatches(
@@ -185,5 +184,14 @@ private suspend fun indexZMQPair(
         )
 
         dbTX.removePoolLiquidity(txRowID, removePoolLiquidity, amounts)
+    } else if (customTX.isDepositToVault()) {
+        val depositToVault = customTX.asDepositToVault()
+
+        dbTX.depositToOrWithdrawFromVault(txRowID, depositToVault)
+    } else if (customTX.isWithdrawFromVault()) {
+        val withdrawFromVault = customTX.asWithdrawFromVault()
+
+
+        dbTX.depositToOrWithdrawFromVault(txRowID, withdrawFromVault)
     }
 }

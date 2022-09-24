@@ -9,30 +9,6 @@ private val numberMatcher = "^\\d+$".toRegex()
 
 object CustomTX {
 
-    data class PoolSwap(
-        val fromAddress: String,
-        val toAddress: String,
-        val fromToken: Int,
-        val toToken: Int,
-        val fromAmount: Double,
-        val maxPrice: Double,
-        var amountTo: Double? = null,
-    )
-
-    data class AddPoolLiquidity(
-        val amountA: Double,
-        val amountB: Double,
-        val tokenA: Int,
-        val tokenB: Int,
-        val owner: String,
-    )
-
-    data class RemovePoolLiquidity(
-        val poolID: Int,
-        val shares: Double,
-        val owner: String,
-    )
-
     @kotlinx.serialization.Serializable
     data class Record(
         val type: String,
@@ -42,6 +18,8 @@ object CustomTX {
         fun isPoolSwap() = type == "PoolSwap"
         fun isAddPoolLiquidity() = type == "AddPoolLiquidity"
         fun isRemovePoolLiquidity() = type == "RemovePoolLiquidity"
+        fun isDepositToVault() = type == "DepositToVault"
+        fun isWithdrawFromVault() = type == "WithdrawFromVault"
 
         fun asPoolSwap() = PoolSwap(
             fromAddress = results.getValue("fromAddress").jsonPrimitive.content,
@@ -88,5 +66,74 @@ object CustomTX {
                 shares = -nAmount,
             )
         }
+
+        fun asDepositToVault() = DepositToVault(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            from = results.getValue("from").jsonPrimitive.content,
+            amount = results.getValue("amount").jsonPrimitive.content,
+        )
+
+        fun asWithdrawFromVault() = WithdrawFromVault(
+            vaultID = results.getValue("vaultId").jsonPrimitive.content,
+            to = results.getValue("to").jsonPrimitive.content,
+            amount = results.getValue("amount").jsonPrimitive.content,
+        )
+    }
+
+    data class PoolSwap(
+        val fromAddress: String,
+        val toAddress: String,
+        val fromToken: Int,
+        val toToken: Int,
+        val fromAmount: Double,
+        val maxPrice: Double,
+        var amountTo: Double? = null,
+    )
+
+    data class AddPoolLiquidity(
+        val amountA: Double,
+        val amountB: Double,
+        val tokenA: Int,
+        val tokenB: Int,
+        val owner: String,
+    )
+
+    data class RemovePoolLiquidity(
+        val poolID: Int,
+        val shares: Double,
+        val owner: String,
+    )
+
+    interface Collateral {
+        val vaultID: String
+
+        fun amount(): Pair<Double, Int>
+        fun owner(): String
+    }
+
+    data class DepositToVault(
+        override val vaultID: String,
+        private val amount: String,
+        val from: String,
+    ) : Collateral {
+
+        override fun amount(): Pair<Double, Int> {
+            val (amountString, tokenIDString) = amount.split("@")
+            return Pair(amountString.toDouble(), tokenIDString.toInt())
+        }
+        override fun owner() = from
+    }
+
+    data class WithdrawFromVault(
+        override val vaultID: String,
+        private val amount: String,
+        val to: String,
+    ) : Collateral {
+
+        override fun amount(): Pair<Double, Int> {
+            val (amountString, tokenIDString) = amount.split("@")
+            return Pair(-amountString.toDouble(), tokenIDString.toInt())
+        }
+        override fun owner() = to
     }
 }
