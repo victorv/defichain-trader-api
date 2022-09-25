@@ -64,7 +64,7 @@ private val template_selectPoolSwaps = """
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
     left join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     where 1=1
-    order by coalesce(minted_tx.block_height, mempool.block_height + 1) DESC, coalesce(minted_tx.txn, mempool.txn)
+    order by coalesce(minted_tx.block_height, mempool.block_height) DESC, coalesce(minted_tx.txn, -1)
     limit 100;
 """.trimIndent()
 
