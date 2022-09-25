@@ -205,7 +205,7 @@ object DB {
         return poolSwaps
             .sortedWith(
                 compareByDescending<PoolSwapRow> { it.blockHeight ?: ((it.mempool?.blockHeight ?: 0) + 1) }
-                    .thenBy { it.ordinal ?: 0 }
+                    .thenBy { it.txn ?: 0 }
             )
     }
 
@@ -254,7 +254,7 @@ object DB {
         return PoolSwapRow(
             txID = resultSet.getString(1),
             blockHeight = resultSet.getLong(2),
-            ordinal = resultSet.getInt(3),
+            txn = resultSet.getInt(3),
             fee = resultSet.getBigDecimal(4)?.floorPlain(),
             amountFrom = resultSet.getBigDecimal(5).floorPlain(),
             amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
@@ -354,7 +354,7 @@ object DB {
     data class PoolSwapRow(
         val txID: String,
         val blockHeight: Long?,
-        val ordinal: Int?,
+        val txn: Int?,
         val fee: String?,
         val amountFrom: String,
         val amountTo: String?,
