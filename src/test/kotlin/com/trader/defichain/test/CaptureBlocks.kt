@@ -97,9 +97,6 @@ private suspend fun capturePoolSwapTests() {
     for (amount in amounts) {
         for (fromTokenSymbol in tokens) {
             for (toTokenSymbol in tokens) {
-                if (fromTokenSymbol == toTokenSymbol) {
-                    continue
-                }
                 if (fromTokenSymbol == "DFI" && toTokenSymbol == "DUSD") {
                     continue
                 }
