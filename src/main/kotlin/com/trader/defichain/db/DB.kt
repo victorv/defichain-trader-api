@@ -62,6 +62,7 @@ private val template_selectPoolSwaps = """
     inner join address at on at.row_id = "to"
     inner join tx on tx.row_id = pool_swap.tx_row_id
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
+    left join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     where 1=1
     order by coalesce(minted_tx.block_height, mempool.block_height + 1) DESC, coalesce(minted_tx.txn, mempool.txn)
     limit 100;
@@ -179,13 +180,17 @@ object DB {
         val conditions = Conditions()
         conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
         conditions.addIfPresent("tt.dc_token_symbol = ?", filter.toTokenSymbol)
+        conditions.addIfPresent(
+            "(af.dc_address = ? OR at.dc_address = ? OR tx.dc_tx_id = ? OR block.hash = ?)",
+            filter.filterString
+        )
+
         if (filter.pager != null) {
             conditions.addIfPresent("", filter.pager.maxBlockHeight)
         }
 
         val poolSwaps = ArrayList<PoolSwapRow>()
         connectionPool.connection.use {
-
             it.prepareStatement(conditions.updatedQuery(template_selectPoolSwaps)).use { statement ->
                 conditions.setData(1, statement)
                 statement.executeQuery().use { resultSet ->
@@ -241,7 +246,7 @@ object DB {
 
     private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
         val blockHeight = resultSet.getObject(2)
-        val blockEntry = if(blockHeight == null) null else BlockEntry(
+        val blockEntry = if (blockHeight == null) null else BlockEntry(
             blockHeight = blockHeight as Long,
             txn = resultSet.getInt(3),
         )
@@ -276,18 +281,12 @@ object DB {
 
         private fun addCondition(condition: Condition) {
             conditions.add(condition)
-            offset++
+            offset += condition.sql.count { it == '?'}
         }
 
-        fun addIfPresent(sql: String, data: String?) {
+        fun addIfPresent(sql: String, data: Any?) {
             if (data != null) {
-                addCondition(StringCondition(sql = sql, offset = offset, data = data))
-            }
-        }
-
-        fun addIfPresent(sql: String, data: Long?) {
-            if (data != null) {
-                addCondition(LongCondition(sql = sql, offset = offset, data = data))
+                addCondition(Condition(sql = sql, offset = offset, data = data as Object))
             }
         }
 
@@ -315,32 +314,16 @@ object DB {
         val mostRecentBlockHeight: Long,
     )
 
-    private interface Condition {
-        val sql: String
-        val offset: Int
-
-        fun setParameter(statement: PreparedStatement, startIndex: Int)
-    }
-
-    data class StringCondition(
-        override val sql: String,
-        override val offset: Int,
-        val data: String,
-    ) : Condition {
-
-        override fun setParameter(statement: PreparedStatement, startIndex: Int) {
-            statement.setString(startIndex + offset, data)
-        }
-    }
-
-    data class LongCondition(
-        override val sql: String,
-        override val offset: Int,
-        val data: Long,
-    ) : Condition {
-
-        override fun setParameter(statement: PreparedStatement, startIndex: Int) {
-            statement.setLong(startIndex + offset, data)
+    data class Condition(
+        val sql: String,
+        val offset: Int,
+        val data: Object,
+    ) {
+        fun setParameter(statement: PreparedStatement, startIndex: Int) {
+            val placeholderCount = sql.count { it == '?' }
+            repeat(placeholderCount) { n ->
+                statement.setObject(startIndex + offset + n, data)
+            }
         }
     }
 
@@ -382,9 +365,11 @@ object DB {
     data class PoolHistoryFilter(
         val fromTokenSymbol: String? = null,
         val toTokenSymbol: String? = null,
+        val filterString: String? = null,
         val pager: Pager? = null,
     ) {
         companion object {
+            val alpha = "^[a-zA-Z]+$".toRegex()
             val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
         }
 
@@ -394,6 +379,7 @@ object DB {
         }
 
         init {
+            check(filterString == null || (filterString.length <= 100 && alpha.matches(filterString)))
             checkTokenSymbol(fromTokenSymbol)
             checkTokenSymbol(toTokenSymbol)
         }
