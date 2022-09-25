@@ -204,7 +204,7 @@ object DB {
         }
         return poolSwaps
             .sortedWith(
-                compareByDescending<PoolSwapRow> { it.blockHeight ?: ((it.blockHeightReceived ?: 0) + 1) }
+                compareByDescending<PoolSwapRow> { it.blockHeight ?: ((it.mempool?.blockHeight ?: 0) + 1) }
                     .thenBy { it.ordinal ?: 0 }
             )
     }
@@ -243,22 +243,29 @@ object DB {
         return aggregates.sortedByDescending { it.aggregateUSD }
     }
 
-    private fun getPoolSwapRow(resultSet: ResultSet) = PoolSwapRow(
-        txID = resultSet.getString(1),
-        blockHeight = resultSet.getLong(2),
-        ordinal = resultSet.getInt(3),
-        fee = resultSet.getBigDecimal(4)?.floorPlain(),
-        amountFrom = resultSet.getBigDecimal(5).floorPlain(),
-        amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
-        tokenFrom = resultSet.getString(7),
-        tokenTo = resultSet.getString(8),
-        maxPrice = resultSet.getBigDecimal(9).floorPlain(),
-        from = resultSet.getString(10),
-        to = resultSet.getString(11),
-        blockHeightReceived = resultSet.getObject(12) as Int,
-        timeReceived = resultSet.getObject(13) as Long,
-        txnReceived = resultSet.getObject(14) as Int,
-    )
+    private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
+        val blockHeightMempool = resultSet.getObject(12)
+        val mempoolEntry = if (blockHeightMempool == null) null else MempoolEntry(
+            blockHeight = blockHeightMempool as Long,
+            time = resultSet.getLong(13),
+            txn = resultSet.getInt(14),
+        )
+
+        return PoolSwapRow(
+            txID = resultSet.getString(1),
+            blockHeight = resultSet.getLong(2),
+            ordinal = resultSet.getInt(3),
+            fee = resultSet.getBigDecimal(4)?.floorPlain(),
+            amountFrom = resultSet.getBigDecimal(5).floorPlain(),
+            amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
+            tokenFrom = resultSet.getString(7),
+            tokenTo = resultSet.getString(8),
+            maxPrice = resultSet.getBigDecimal(9).floorPlain(),
+            from = resultSet.getString(10),
+            to = resultSet.getString(11),
+            mempool = mempoolEntry
+        )
+    }
 
     private class Conditions {
 
@@ -336,6 +343,12 @@ object DB {
         }
     }
 
+    @kotlinx.serialization.Serializable
+    data class MempoolEntry(
+        val blockHeight: Long,
+        val txn: Int,
+        val time: Long,
+    )
 
     @kotlinx.serialization.Serializable
     data class PoolSwapRow(
@@ -350,9 +363,7 @@ object DB {
         val maxPrice: String,
         val from: String,
         val to: String,
-        val blockHeightReceived: Int?,
-        val timeReceived: Long?,
-        val txnReceived: Int?,
+        val mempool: MempoolEntry?,
     )
 
     @kotlinx.serialization.Serializable
