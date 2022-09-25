@@ -369,7 +369,7 @@ object DB {
         val pager: Pager? = null,
     ) {
         companion object {
-            val alpha = "^[a-zA-Z]+$".toRegex()
+            val alphaNumeric = "^[a-zA-Z\\d]+$".toRegex()
             val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
         }
 
@@ -379,7 +379,7 @@ object DB {
         }
 
         init {
-            check(filterString == null || (filterString.length <= 100 && alpha.matches(filterString)))
+            check(filterString == null || (filterString.length <= 100 && alphaNumeric.matches(filterString)))
             checkTokenSymbol(fromTokenSymbol)
             checkTokenSymbol(toTokenSymbol)
         }
