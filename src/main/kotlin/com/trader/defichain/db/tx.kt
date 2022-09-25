@@ -3,6 +3,7 @@ package com.trader.defichain.db
 import com.trader.defichain.indexer.ZMQRawTX
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.util.Future
+import java.math.BigDecimal
 
 private const val template_insertBlock = """
 INSERT INTO block (height, time, hash) VALUES (?, ?, ?)
@@ -15,7 +16,7 @@ ON CONFLICT (tx_row_id) DO NOTHING
 """
 
 private const val template_insertMintedTX = """
-INSERT INTO minted_tx (tx_row_id, block_height, txn, fee) VALUES (?, ?, ?, ?)
+INSERT INTO minted_tx (tx_row_id, block_height, txn) VALUES (?, ?, ?)
 ON CONFLICT (tx_row_id) DO UPDATE SET tx_row_id = minted_tx.tx_row_id
 """
 
@@ -26,8 +27,9 @@ RETURNING row_id;
 """
 
 private const val template_insertTX = """
-INSERT INTO tx (dc_tx_id, tx_type_row_id, confirmed) VALUES (?, ?, ?)
+INSERT INTO tx (dc_tx_id, tx_type_row_id, fee, confirmed) VALUES (?, ?, ?, ?)
 ON CONFLICT (dc_tx_id) DO UPDATE SET 
+fee = ?,
 confirmed = ?
 RETURNING row_id;
 """
@@ -56,12 +58,11 @@ fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater 
         it.setLong(1, txRowID.get())
         it.setLong(2, mintedTX.blockHeight)
         it.setInt(3, mintedTX.txn)
-        it.setBigDecimal(4, mintedTX.txFee)
         insertOrDoNothing(it)
     }
 }
 
-fun DBTX.insertTX(txID: String, txType: String, isConfirmed: Boolean): Future<Long> {
+fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, isConfirmed: Boolean): Future<Long> {
     val rowID = Future<Long>()
 
     doLater {
@@ -70,8 +71,11 @@ fun DBTX.insertTX(txID: String, txType: String, isConfirmed: Boolean): Future<Lo
         connection.prepareStatement(template_insertTX).use {
             it.setString(1, txID)
             it.setInt(2, txTypeRowID)
-            it.setBoolean(3, isConfirmed)
+            it.setBigDecimal(3, fee)
             it.setBoolean(4, isConfirmed)
+
+            it.setBigDecimal(5, fee)
+            it.setBoolean(6, isConfirmed)
             rowID.set(upsertReturning(it))
         }
     }

@@ -43,7 +43,7 @@ private val template_selectPoolSwaps = """
     select tx.dc_tx_id as tx_id,
     minted_tx.block_height, 
     minted_tx.txn, 
-    minted_tx.fee, 
+    tx.fee, 
     amount_from, 
     amount_to, 
     tf.dc_token_symbol as token_from, 
@@ -244,7 +244,6 @@ object DB {
         val blockEntry = if(blockHeight == null) null else BlockEntry(
             blockHeight = blockHeight as Long,
             txn = resultSet.getInt(3),
-            fee = resultSet.getBigDecimal(4).floorPlain()
         )
 
         val blockHeightMempool = resultSet.getObject(12)
@@ -256,6 +255,7 @@ object DB {
 
         return PoolSwapRow(
             txID = resultSet.getString(1),
+            fee = resultSet.getBigDecimal(4).floorPlain(),
             amountFrom = resultSet.getBigDecimal(5).floorPlain(),
             amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
             tokenFrom = resultSet.getString(7),
@@ -348,7 +348,6 @@ object DB {
     data class BlockEntry(
         val blockHeight: Long,
         val txn: Int,
-        val fee: String,
     )
 
     @kotlinx.serialization.Serializable
@@ -361,6 +360,7 @@ object DB {
     @kotlinx.serialization.Serializable
     data class PoolSwapRow(
         val txID: String,
+        val fee: String,
         val amountFrom: String,
         val amountTo: String?,
         val tokenFrom: String,
@@ -413,7 +413,6 @@ object DB {
         val txID: String,
         val blockHeight: Long,
         val blockTime: Long,
-        val txFee: BigDecimal,
         val txn: Int,
         val type: String,
     )

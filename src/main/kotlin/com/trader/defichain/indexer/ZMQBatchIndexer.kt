@@ -126,7 +126,8 @@ private suspend fun indexZMQPair(
     val customTX = RPC.decodeCustomTX(tx.hex!!) ?: return
     if (!whitelistedTXTypes.contains(customTX.type)) return
 
-    val txRowID = dbTX.insertTX(tx.txID, customTX.type, zmqPair.isConfirmed)
+    val fee = calculateFee(tx, zmqBatch.txContext)
+    val txRowID = dbTX.insertTX(tx.txID, customTX.type, fee, zmqPair.isConfirmed)
 
     if (rawTX != null) {
         dbTX.insertRawTX(txRowID, rawTX)
@@ -135,11 +136,9 @@ private suspend fun indexZMQPair(
     val txn = tx.txn
 
     if(zmqPair.isConfirmed) {
-        val fee = calculateFee(tx, zmqBatch.txContext)
         val mintedTX = DB.MintedTX(
             txID = tx.txID,
             type = customTX.type,
-            txFee = fee,
             txn = txn,
             blockHeight = block.height,
             blockTime = block.time,
