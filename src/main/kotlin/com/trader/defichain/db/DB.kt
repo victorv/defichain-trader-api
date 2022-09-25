@@ -55,7 +55,7 @@ private val template_selectPoolSwaps = """
     mempool.time,
     mempool.txn
     from pool_swap 
-    inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
+    left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     inner join token tf on tf.dc_token_id=token_from 
     inner join token tt on tt.dc_token_id=token_to 
     inner join address af on af.row_id = "from"
@@ -63,7 +63,7 @@ private val template_selectPoolSwaps = """
     inner join tx on tx.row_id = pool_swap.tx_row_id
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
     where 1=1
-    order by minted_tx.block_height DESC,minted_tx.txn
+    order by coalesce(minted_tx.block_height, mempool.block_height + 1) DESC, coalesce(minted_tx.txn, mempool.txn)
     limit 100;
 """.trimIndent()
 
@@ -203,10 +203,6 @@ object DB {
             }
         }
         return poolSwaps
-            .sortedWith(
-                compareByDescending<PoolSwapRow> { it.blockHeight ?: ((it.mempool?.blockHeight ?: 0) + 1) }
-                    .thenBy { it.txn ?: 0 }
-            )
     }
 
     fun tokensSoldRecently() = calcTokenAggregate(template_tokensSoldRecently)
@@ -244,6 +240,13 @@ object DB {
     }
 
     private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
+        val blockHeight = resultSet.getObject(2)
+        val blockEntry = if(blockHeight == null) null else BlockEntry(
+            blockHeight = blockHeight as Long,
+            txn = resultSet.getInt(3),
+            fee = resultSet.getBigDecimal(4).floorPlain()
+        )
+
         val blockHeightMempool = resultSet.getObject(12)
         val mempoolEntry = if (blockHeightMempool == null) null else MempoolEntry(
             blockHeight = blockHeightMempool as Long,
@@ -253,9 +256,6 @@ object DB {
 
         return PoolSwapRow(
             txID = resultSet.getString(1),
-            blockHeight = resultSet.getLong(2),
-            txn = resultSet.getInt(3),
-            fee = resultSet.getBigDecimal(4)?.floorPlain(),
             amountFrom = resultSet.getBigDecimal(5).floorPlain(),
             amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
             tokenFrom = resultSet.getString(7),
@@ -263,6 +263,7 @@ object DB {
             maxPrice = resultSet.getBigDecimal(9).floorPlain(),
             from = resultSet.getString(10),
             to = resultSet.getString(11),
+            block = blockEntry,
             mempool = mempoolEntry
         )
     }
@@ -344,6 +345,13 @@ object DB {
     }
 
     @kotlinx.serialization.Serializable
+    data class BlockEntry(
+        val blockHeight: Long,
+        val txn: Int,
+        val fee: String,
+    )
+
+    @kotlinx.serialization.Serializable
     data class MempoolEntry(
         val blockHeight: Long,
         val txn: Int,
@@ -353,9 +361,6 @@ object DB {
     @kotlinx.serialization.Serializable
     data class PoolSwapRow(
         val txID: String,
-        val blockHeight: Long?,
-        val txn: Int?,
-        val fee: String?,
         val amountFrom: String,
         val amountTo: String?,
         val tokenFrom: String,
@@ -363,6 +368,7 @@ object DB {
         val maxPrice: String,
         val from: String,
         val to: String,
+        val block: BlockEntry?,
         val mempool: MempoolEntry?,
     )
 
