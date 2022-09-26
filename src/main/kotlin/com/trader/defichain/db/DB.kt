@@ -61,9 +61,9 @@ private val template_selectPoolSwaps = """
     inner join address af on af.row_id = "from"
     inner join address at on at.row_id = "to"
     inner join tx on tx.row_id = pool_swap.tx_row_id
-    inner join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
+    inner join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     where 1=1
     order by coalesce(minted_tx.block_height, mempool.block_height) DESC, coalesce(minted_tx.txn, -1)
     limit 26;
