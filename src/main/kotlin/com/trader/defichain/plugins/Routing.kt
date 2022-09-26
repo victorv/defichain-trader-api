@@ -90,7 +90,10 @@ fun Application.configureRouting() {
                 return@get
             }
 
-            val poolSwap = parsePoolSwap("$poolSwapParam desiredResult 1.0")
+            val poolSwap = parsePoolSwap(
+                if (poolSwapParam.contains("desiredResult")) poolSwapParam
+                else "$poolSwapParam desiredResult 1.0"
+            )
             poolSwap.checkDesiredResult()
             val testResult = testPoolSwap(poolSwap)
             call.respond(testResult)

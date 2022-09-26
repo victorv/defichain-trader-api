@@ -39,12 +39,12 @@ where block_height >= (select max(block_height) from minted_tx) - 120
 group by token.dc_token_symbol;
 """.trimIndent()
 
+// TODO for optimal performance some filters should be applied to the join directly and not be part of the where clause
 private val template_selectPoolSwaps = """
     select tx.dc_tx_id as tx_id,
     minted_tx.block_height, 
-    minted_tx.block_time, 
-    minted_tx.ordinal, 
-    minted_tx.fee, 
+    minted_tx.txn, 
+    tx.fee, 
     amount_from, 
     amount_to, 
     tf.dc_token_symbol as token_from, 
@@ -52,20 +52,21 @@ private val template_selectPoolSwaps = """
     max_price,
     af.dc_address as "from",
     at.dc_address as "to",
-    block_height_received,
-    time_received,
-    mempool.fee as fee_received
+    mempool.block_height,
+    mempool.time,
+    mempool.txn
     from pool_swap 
-    inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     inner join token tf on tf.dc_token_id=token_from 
     inner join token tt on tt.dc_token_id=token_to 
     inner join address af on af.row_id = "from"
     inner join address at on at.row_id = "to"
     inner join tx on tx.row_id = pool_swap.tx_row_id
+    left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
+    inner join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     where 1=1
-    order by block_height DESC,ordinal
-    limit 100;
+    order by coalesce(minted_tx.block_height, mempool.block_height) DESC, coalesce(minted_tx.txn, -1)
+    limit 26 offset 0;
 """.trimIndent()
 
 val connectionPool = createConnectionPool()
@@ -177,16 +178,36 @@ object DB {
     }
 
     fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
-        val conditions = Conditions()
+        val conditions = Conditions(filter.sort, filter.pager)
         conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
         conditions.addIfPresent("tt.dc_token_symbol = ?", filter.toTokenSymbol)
+
+        val filterString = filter.filterString
+        if (filterString != null) {
+
+            // TODO research if address length can be >= 64
+            if (filterString.length != 64) {
+                conditions.addIfPresent(
+                    "(af.dc_address = ? OR at.dc_address = ?)",
+                    filterString
+                )
+            } else {
+                conditions.addIfPresent(
+                    "(tx.dc_tx_id = ? OR block.hash = ?)",
+                    filterString
+                )
+            }
+        }
+
         if (filter.pager != null) {
-            conditions.addIfPresent("", filter.pager.maxBlockHeight)
+            conditions.addIfPresent(
+                "(minted_tx.block_height <= ? OR mempool.block_height + 1 <= ?)",
+                filter.pager.maxBlockHeight
+            )
         }
 
         val poolSwaps = ArrayList<PoolSwapRow>()
         connectionPool.connection.use {
-
             it.prepareStatement(conditions.updatedQuery(template_selectPoolSwaps)).use { statement ->
                 conditions.setData(1, statement)
                 statement.executeQuery().use { resultSet ->
@@ -204,11 +225,6 @@ object DB {
             }
         }
         return poolSwaps
-            .sortedWith(
-                compareByDescending<PoolSwapRow> { it.blockHeight ?: ((it.blockHeightReceived ?: 0) + 1) }
-                    .thenBy { it.ordinal ?: 0 }
-                    .thenByDescending { (it.fee ?: it.feeReceived)?.toDouble() }
-            )
     }
 
     fun tokensSoldRecently() = calcTokenAggregate(template_tokensSoldRecently)
@@ -245,53 +261,67 @@ object DB {
         return aggregates.sortedByDescending { it.aggregateUSD }
     }
 
-    private fun getPoolSwapRow(resultSet: ResultSet) = PoolSwapRow(
-        txID = resultSet.getString(1),
-        blockHeight = resultSet.getLong(2),
-        blockTime = resultSet.getLong(3),
-        ordinal = resultSet.getInt(4),
-        fee = resultSet.getBigDecimal(5)?.floorPlain(),
-        amountFrom = resultSet.getBigDecimal(6).floorPlain(),
-        amountTo = resultSet.getBigDecimal(7).floorPlain(),
-        tokenFrom = resultSet.getString(8),
-        tokenTo = resultSet.getString(9),
-        maxPrice = resultSet.getBigDecimal(10).floorPlain(),
-        from = resultSet.getString(11),
-        to = resultSet.getString(12),
-        blockHeightReceived = resultSet.getInt(13),
-        timeReceived = resultSet.getLong(14),
-        feeReceived = resultSet.getBigDecimal(15)?.floorPlain(),
-    )
+    private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
+        val blockHeight = resultSet.getObject(2)
+        val blockEntry = if (blockHeight == null) null else BlockEntry(
+            blockHeight = blockHeight as Long,
+            txn = resultSet.getInt(3),
+        )
 
-    private class Conditions {
+        val blockHeightMempool = resultSet.getObject(12)
+        val mempoolEntry = if (blockHeightMempool == null) null else MempoolEntry(
+            blockHeight = blockHeightMempool as Long,
+            time = resultSet.getLong(13),
+            txn = resultSet.getInt(14),
+        )
+
+        return PoolSwapRow(
+            txID = resultSet.getString(1),
+            fee = resultSet.getBigDecimal(4).floorPlain(),
+            amountFrom = resultSet.getBigDecimal(5).floorPlain(),
+            amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
+            tokenFrom = resultSet.getString(7),
+            tokenTo = resultSet.getString(8),
+            maxPrice = resultSet.getBigDecimal(9).floorPlain(),
+            from = resultSet.getString(10),
+            to = resultSet.getString(11),
+            block = blockEntry,
+            mempool = mempoolEntry
+        )
+    }
+
+    private class Conditions(val sortOrder: String?, val pager: Pager?) {
 
         private val conditions = ArrayList<Condition>()
         private var offset = 0
 
-
         private fun addCondition(condition: Condition) {
             conditions.add(condition)
-            offset++
+            offset += condition.sql.count { it == '?' }
         }
 
-        fun addIfPresent(sql: String, data: String?) {
+        fun addIfPresent(sql: String, data: Any?) {
             if (data != null) {
-                addCondition(StringCondition(sql = sql, offset = offset, data = data))
-            }
-        }
-
-        fun addIfPresent(sql: String, data: Long?) {
-            if (data != null) {
-                addCondition(LongCondition(sql = sql, offset = offset, data = data))
+                addCondition(Condition(sql = sql, offset = offset, data = data as Object))
             }
         }
 
         fun updatedQuery(sql: String): String {
-            if (conditions.isEmpty()) {
-                return sql
+            var modifiedSQL = sql
+
+            if (conditions.isNotEmpty()) {
+                val whereClause = conditions.joinToString(" AND ") { it.sql }
+                modifiedSQL = sql.replace("1=1", whereClause)
             }
-            val whereClause = conditions.joinToString(" AND ") { it.sql }
-            return sql.replace("1=1", whereClause)
+
+            if (sortOrder != null) {
+                modifiedSQL = modifiedSQL.replace("order by", "order by $sortOrder, ")
+            }
+
+            if(pager != null) {
+                modifiedSQL = modifiedSQL.replace("offset 0", "offset ${pager.offset}")
+            }
+            return modifiedSQL
         }
 
         fun setData(startIndex: Int, statement: PreparedStatement) {
@@ -310,68 +340,72 @@ object DB {
         val mostRecentBlockHeight: Long,
     )
 
-    private interface Condition {
-        val sql: String
-        val offset: Int
-
-        fun setParameter(statement: PreparedStatement, startIndex: Int)
-    }
-
-    data class StringCondition(
-        override val sql: String,
-        override val offset: Int,
-        val data: String,
-    ) : Condition {
-
-        override fun setParameter(statement: PreparedStatement, startIndex: Int) {
-            statement.setString(startIndex + offset, data)
+    data class Condition(
+        val sql: String,
+        val offset: Int,
+        val data: Object,
+    ) {
+        fun setParameter(statement: PreparedStatement, startIndex: Int) {
+            val placeholderCount = sql.count { it == '?' }
+            repeat(placeholderCount) { n ->
+                statement.setObject(startIndex + offset + n, data)
+            }
         }
     }
 
-    data class LongCondition(
-        override val sql: String,
-        override val offset: Int,
-        val data: Long,
-    ) : Condition {
+    @kotlinx.serialization.Serializable
+    data class BlockEntry(
+        val blockHeight: Long,
+        val txn: Int,
+    )
 
-        override fun setParameter(statement: PreparedStatement, startIndex: Int) {
-            statement.setLong(startIndex + offset, data)
-        }
-    }
-
+    @kotlinx.serialization.Serializable
+    data class MempoolEntry(
+        val blockHeight: Long,
+        val txn: Int,
+        val time: Long,
+    )
 
     @kotlinx.serialization.Serializable
     data class PoolSwapRow(
         val txID: String,
-        val blockHeight: Long?,
-        val blockTime: Long?,
-        val ordinal: Int?,
-        val fee: String?,
+        val fee: String,
         val amountFrom: String,
-        val amountTo: String,
+        val amountTo: String?,
         val tokenFrom: String,
         val tokenTo: String,
         val maxPrice: String,
         val from: String,
         val to: String,
-        val blockHeightReceived: Int?,
-        val timeReceived: Long?,
-        val feeReceived: String?,
+        val block: BlockEntry?,
+        val mempool: MempoolEntry?,
     )
 
     @kotlinx.serialization.Serializable
     data class Pager(
         val maxBlockHeight: Long,
-        val minOrdinal: Int,
+        val offset: Int,
     )
 
     @kotlinx.serialization.Serializable
     data class PoolHistoryFilter(
         val fromTokenSymbol: String? = null,
         val toTokenSymbol: String? = null,
+        val filterString: String? = null,
+        var sort: String? = null,
         val pager: Pager? = null,
     ) {
         companion object {
+
+            val sortOptions = mapOf(
+                "fee_asc" to "tx.fee ASC",
+                "fee_desc" to "tx.fee DESC",
+                "input_amount_asc" to "pool_swap.amount_from ASC",
+                "input_amount_desc" to "pool_swap.amount_from DESC",
+                "output_amount_asc" to "coalesce(pool_swap.amount_to, 0) ASC",
+                "output_amount_desc" to "coalesce(pool_swap.amount_to, 0) DESC",
+            )
+            val alphaNumeric = "^[a-zA-Z\\d]+$".toRegex()
             val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
         }
 
@@ -381,6 +415,11 @@ object DB {
         }
 
         init {
+            if (sort != null) {
+                sort = sortOptions.getValue(sort!!)
+            }
+
+            check(filterString == null || (filterString.length <= 100 && alphaNumeric.matches(filterString)))
             checkTokenSymbol(fromTokenSymbol)
             checkTokenSymbol(toTokenSymbol)
         }
@@ -400,7 +439,6 @@ object DB {
         val txID: String,
         val blockHeight: Long,
         val blockTime: Long,
-        val txFee: BigDecimal,
         val txn: Int,
         val type: String,
     )
