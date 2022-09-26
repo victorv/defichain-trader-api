@@ -66,7 +66,7 @@ private val template_selectPoolSwaps = """
     inner join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     where 1=1
     order by coalesce(minted_tx.block_height, mempool.block_height) DESC, coalesce(minted_tx.txn, -1)
-    limit 26;
+    limit 26 offset 0;
 """.trimIndent()
 
 val connectionPool = createConnectionPool()
@@ -178,7 +178,7 @@ object DB {
     }
 
     fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
-        val conditions = Conditions(filter.sort)
+        val conditions = Conditions(filter.sort, filter.pager)
         conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
         conditions.addIfPresent("tt.dc_token_symbol = ?", filter.toTokenSymbol)
 
@@ -200,7 +200,10 @@ object DB {
         }
 
         if (filter.pager != null) {
-            conditions.addIfPresent("", filter.pager.maxBlockHeight)
+            conditions.addIfPresent(
+                "(minted_tx.block_height <= ? OR mempool.block_height + 1 <= ?)",
+                filter.pager.maxBlockHeight
+            )
         }
 
         val poolSwaps = ArrayList<PoolSwapRow>()
@@ -287,7 +290,7 @@ object DB {
         )
     }
 
-    private class Conditions(val sortOrder: String?) {
+    private class Conditions(val sortOrder: String?, val pager: Pager?) {
 
         private val conditions = ArrayList<Condition>()
         private var offset = 0
@@ -315,6 +318,9 @@ object DB {
                 modifiedSQL = modifiedSQL.replace("order by", "order by $sortOrder, ")
             }
 
+            if(pager != null) {
+                modifiedSQL = modifiedSQL.replace("offset 0", "offset ${pager.offset}")
+            }
             return modifiedSQL
         }
 
@@ -378,7 +384,7 @@ object DB {
     @kotlinx.serialization.Serializable
     data class Pager(
         val maxBlockHeight: Long,
-        val minOrdinal: Int,
+        val offset: Int,
     )
 
     @kotlinx.serialization.Serializable
