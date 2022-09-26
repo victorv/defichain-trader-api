@@ -180,10 +180,22 @@ object DB {
         val conditions = Conditions()
         conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
         conditions.addIfPresent("tt.dc_token_symbol = ?", filter.toTokenSymbol)
-        conditions.addIfPresent(
-            "(af.dc_address = ? OR at.dc_address = ? OR tx.dc_tx_id = ? OR block.hash = ?)",
-            filter.filterString
-        )
+
+        val filterString = filter.filterString
+        if (filterString != null) {
+
+            if (filterString.length < 64) {
+                conditions.addIfPresent(
+                    "(af.dc_address = ? OR at.dc_address = ?)",
+                    filterString
+                )
+            } else if (filterString.length == 64) {
+                conditions.addIfPresent(
+                    "(tx.dc_tx_id = ? OR block.hash = ?)",
+                    filterString
+                )
+            }
+        }
 
         if (filter.pager != null) {
             conditions.addIfPresent("", filter.pager.maxBlockHeight)
@@ -281,7 +293,7 @@ object DB {
 
         private fun addCondition(condition: Condition) {
             conditions.add(condition)
-            offset += condition.sql.count { it == '?'}
+            offset += condition.sql.count { it == '?' }
         }
 
         fun addIfPresent(sql: String, data: Any?) {
