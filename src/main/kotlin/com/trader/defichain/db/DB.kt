@@ -65,7 +65,7 @@ private val template_selectPoolSwaps = """
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
     where 1=1
     order by coalesce(minted_tx.block_height, mempool.block_height) DESC, coalesce(minted_tx.txn, -1)
-    limit 100;
+    limit 26;
 """.trimIndent()
 
 val connectionPool = createConnectionPool()
