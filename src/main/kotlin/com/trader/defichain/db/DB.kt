@@ -55,12 +55,12 @@ private val template_selectPoolSwaps = """
     mempool.time,
     mempool.txn
     from pool_swap 
-    left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     inner join token tf on tf.dc_token_id=token_from 
     inner join token tt on tt.dc_token_id=token_to 
     inner join address af on af.row_id = "from"
     inner join address at on at.row_id = "to"
     inner join tx on tx.row_id = pool_swap.tx_row_id
+    left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
     left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
     left join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
     where 1=1
