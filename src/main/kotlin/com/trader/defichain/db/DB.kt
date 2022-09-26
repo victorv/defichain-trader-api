@@ -185,6 +185,7 @@ object DB {
         val filterString = filter.filterString
         if (filterString != null) {
 
+            // TODO research if address length can be >= 64
             if (filterString.length < 64) {
                 conditions.addIfPresent(
                     "(af.dc_address = ? OR at.dc_address = ?)",
