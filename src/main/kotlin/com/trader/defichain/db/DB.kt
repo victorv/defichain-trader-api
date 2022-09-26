@@ -178,7 +178,7 @@ object DB {
     }
 
     fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
-        val conditions = Conditions()
+        val conditions = Conditions(filter.sort)
         conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
         conditions.addIfPresent("tt.dc_token_symbol = ?", filter.toTokenSymbol)
 
@@ -287,11 +287,10 @@ object DB {
         )
     }
 
-    private class Conditions {
+    private class Conditions(val sortOrder: String?) {
 
         private val conditions = ArrayList<Condition>()
         private var offset = 0
-
 
         private fun addCondition(condition: Condition) {
             conditions.add(condition)
@@ -305,11 +304,18 @@ object DB {
         }
 
         fun updatedQuery(sql: String): String {
-            if (conditions.isEmpty()) {
-                return sql
+            var modifiedSQL = sql
+
+            if (conditions.isNotEmpty()) {
+                val whereClause = conditions.joinToString(" AND ") { it.sql }
+                modifiedSQL = sql.replace("1=1", whereClause)
             }
-            val whereClause = conditions.joinToString(" AND ") { it.sql }
-            return sql.replace("1=1", whereClause)
+
+            if (sortOrder != null) {
+                modifiedSQL = modifiedSQL.replace("order by", "order by $sortOrder, ")
+            }
+
+            return modifiedSQL
         }
 
         fun setData(startIndex: Int, statement: PreparedStatement) {
@@ -380,9 +386,19 @@ object DB {
         val fromTokenSymbol: String? = null,
         val toTokenSymbol: String? = null,
         val filterString: String? = null,
+        var sort: String? = null,
         val pager: Pager? = null,
     ) {
         companion object {
+
+            val sortOptions = mapOf(
+                "fee_asc" to "tx.fee ASC",
+                "fee_desc" to "tx.fee DESC",
+                "input_amount_asc" to "pool_swap.amount_from ASC",
+                "input_amount_desc" to "pool_swap.amount_from DESC",
+                "output_amount_asc" to "coalesce(pool_swap.amount_to, 0) ASC",
+                "output_amount_desc" to "coalesce(pool_swap.amount_to, 0) DESC",
+            )
             val alphaNumeric = "^[a-zA-Z\\d]+$".toRegex()
             val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
         }
@@ -393,6 +409,10 @@ object DB {
         }
 
         init {
+            if (sort != null) {
+                sort = sortOptions.getValue(sort!!)
+            }
+
             check(filterString == null || (filterString.length <= 100 && alphaNumeric.matches(filterString)))
             checkTokenSymbol(fromTokenSymbol)
             checkTokenSymbol(toTokenSymbol)
