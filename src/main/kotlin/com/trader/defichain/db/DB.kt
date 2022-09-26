@@ -186,12 +186,12 @@ object DB {
         if (filterString != null) {
 
             // TODO research if address length can be >= 64
-            if (filterString.length < 64) {
+            if (filterString.length != 64) {
                 conditions.addIfPresent(
                     "(af.dc_address = ? OR at.dc_address = ?)",
                     filterString
                 )
-            } else if (filterString.length == 64) {
+            } else {
                 conditions.addIfPresent(
                     "(tx.dc_tx_id = ? OR block.hash = ?)",
                     filterString
