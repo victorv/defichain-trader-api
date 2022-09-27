@@ -2,18 +2,18 @@ package com.trader.defichain.indexer
 
 import auctionBid
 import com.trader.defichain.db.*
-import com.trader.defichain.rpc.*
-import kotlinx.coroutines.*
+import com.trader.defichain.rpc.AccountHistory
+import com.trader.defichain.rpc.Block
+import com.trader.defichain.rpc.RPC
+import com.trader.defichain.rpc.RPCMethod
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.CoroutineContext
 
-private val semaphore = Semaphore(3)
-private val dispatcher = newSingleThreadContext("ZMQBatchIndexer")
 private val logger = LoggerFactory.getLogger("ZMQBatchIndexer")
 private val zmqBatchChannel = Channel<ZMQBatch>(20, BufferOverflow.DROP_OLDEST)
 
@@ -99,18 +99,12 @@ private suspend fun indexZMQBatches(
 private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
     dbTX.insertBlock(zmqBatch.block)
 
-    withContext(dispatcher) {
-        zmqBatch.tx.map { zmqPair ->
-            async {
-                semaphore.withPermit {
-                    try {
-                        indexZMQPair(zmqPair, zmqBatch, dbTX)
-                    } catch (e: Throwable) {
-                        throw RuntimeException("Failed to process $zmqPair", e)
-                    }
-                }
-            }
-        }.awaitAll()
+    for (zmqPair in zmqBatch.tx) {
+        try {
+            indexZMQPair(zmqPair, zmqBatch, dbTX)
+        } catch (e: Throwable) {
+            throw RuntimeException("Failed to process $zmqPair", e)
+        }
     }
 }
 
