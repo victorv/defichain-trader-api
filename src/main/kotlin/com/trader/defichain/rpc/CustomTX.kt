@@ -94,7 +94,7 @@ object CustomTX {
                 return amounts
             }
 
-            val amount = results.entries.first { numberMatcher.matches(it.key) }
+            val amount = results.entries.firstOrNull { numberMatcher.matches(it.key) } ?: return emptyList()
             return listOf(Pair(amount.value.jsonPrimitive.content.toDouble(), amount.key.toInt()))
         }
 
