@@ -73,6 +73,10 @@ object CustomTX {
         }
 
         private fun getAmounts(results: JsonObject): List<Pair<Double, Int>> {
+            if(results.isEmpty()) {
+                return emptyList()
+            }
+
             if (results.containsKey("amount")) {
                 val amount = results.getValue("amount").jsonPrimitive.content
                 return listOf(decodeAmount(amount))
