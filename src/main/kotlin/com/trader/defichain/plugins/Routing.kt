@@ -7,23 +7,30 @@ import com.trader.defichain.http.errorPoolSwapLimitExceeded
 import com.trader.defichain.http.errorPoolswapsMissing
 import com.trader.defichain.http.poolswapLimit
 import com.trader.defichain.http.respond
+import com.trader.defichain.mempool.connections
 import com.trader.defichain.telegram.AccountData
 import com.trader.defichain.telegram.createAccountId
 import com.trader.defichain.telegram.getAccountByChatId
 import io.ktor.http.*
+import io.ktor.network.sockets.Connection
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
 import io.ktor.util.cio.*
 import io.ktor.util.pipeline.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.Writer
+import java.util.concurrent.atomic.AtomicInteger
 
 suspend fun respondEventStream(call: ApplicationCall, writer: suspend Writer.() -> Unit) {
     call.response.header("X-Accel-Buffering", "no")
@@ -42,6 +49,22 @@ fun Application.configureRouting() {
 
             default("index.html")
         }
+
+        webSocket("/stream") {
+            val connection = com.trader.defichain.mempool.Connection()
+            connections += connection
+            try {
+                for (message in connection.channel) {
+                    send(message)
+                }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                println("Removing $connection!")
+                connections -= connection
+            }
+        }
+
         get("/status") {
             call.respond(HttpStatusCode.OK, "ok")
         }

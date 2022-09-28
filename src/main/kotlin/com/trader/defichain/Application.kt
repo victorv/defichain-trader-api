@@ -7,8 +7,10 @@ import com.trader.defichain.config.zmqConfig
 import com.trader.defichain.dex.broadcastDEX
 import com.trader.defichain.dex.cachePoolPairs
 import com.trader.defichain.dex.pingDEXSubscribers
+import com.trader.defichain.mempool.sendMempoolEvents
 import com.trader.defichain.plugins.configureContentNegotiation
 import com.trader.defichain.plugins.configureRouting
+import com.trader.defichain.plugins.configureWebsockets
 import com.trader.defichain.telegram.approveNewAccounts
 import com.trader.defichain.telegram.loadAccounts
 import com.trader.defichain.telegram.manageAccounts
@@ -71,7 +73,12 @@ fun main(vararg args: String) {
         receiveFullNodeEvents(ZContext(), coroutineContext)
     }
 
+    GlobalScope.launch(Dispatchers.IO) {
+        sendMempoolEvents(coroutineContext)
+    }
+
     applicationEngine = embeddedServer(Netty, port = appServerConfig.port, host = appServerConfig.host) {
+        configureWebsockets()
         configureContentNegotiation()
         configureRouting()
     }
