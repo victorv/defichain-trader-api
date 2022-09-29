@@ -4,14 +4,10 @@ import com.trader.defichain.dex.getOraclePriceForSymbol
 import com.trader.defichain.util.floorPlain
 import kotlinx.serialization.json.*
 import org.postgresql.ds.PGSimpleDataSource
-import org.slf4j.LoggerFactory
 import java.math.BigDecimal
-import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.Types
-
-private val logger = LoggerFactory.getLogger("DB")
 
 private val template_tokensSoldRecently = """
 select 
@@ -69,35 +65,15 @@ private val template_selectPoolSwaps = """
     limit 26 offset 0;
 """.trimIndent()
 
-val connectionPool = createConnectionPool()
+val connectionPool = createReadonlyDataSource()
 
-private fun createConnectionPool(): PGSimpleDataSource {
+private fun createReadonlyDataSource(): PGSimpleDataSource {
     val connectionPool = PGSimpleDataSource()
     connectionPool.isReadOnly = true
     connectionPool.databaseName = "trader"
     connectionPool.user = "postgres"
     connectionPool.password = "postgres"
     return connectionPool
-}
-
-fun createWriteableConnection(): Connection {
-    val connection = connectionPool.connection
-    connection.autoCommit = false
-    connection.isReadOnly = false
-    return connection
-}
-
-fun useOrReplace(connection: Connection): Connection {
-    if (!connection.isValid(1000)) {
-        logger.warn("Connection $connection is no longer valid and will be replaced")
-        try {
-            connection.close()
-        } catch (e: Throwable) {
-            logger.warn("Suppressed while closing invalid connection", e)
-        }
-        return createWriteableConnection()
-    }
-    return connection
 }
 
 fun insertOrDoNothing(statement: PreparedStatement) {
