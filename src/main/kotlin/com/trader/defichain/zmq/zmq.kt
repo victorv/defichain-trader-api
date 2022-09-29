@@ -2,6 +2,7 @@ package com.trader.defichain.zmq
 
 import com.trader.defichain.App
 import com.trader.defichain.config.zmqConfig
+import com.trader.defichain.dex.cachePoolPairs
 import com.trader.defichain.util.toHex2
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -43,6 +44,8 @@ suspend fun receiveFullNodeEvents(zmqContext: ZContext, coroutineContext: Corout
                         val frames = ZMsg.recvMsg(subscriber).toList()
                         when (val topic = frames[0].getString(StandardCharsets.UTF_8)) {
                             ZMQEventType.HASH_BLOCK.code -> {
+                                cachePoolPairs()
+
                                 val blockHash = frames[1].data.toHex2()
                                 for (channel in eventChannels) {
                                     channel.send(ZMQEvent(ZMQEventType.HASH_BLOCK, blockHash))

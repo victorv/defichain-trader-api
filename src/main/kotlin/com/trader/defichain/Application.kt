@@ -58,10 +58,6 @@ fun main(vararg args: String) {
     }
 
     GlobalScope.launch(Dispatchers.IO) {
-        cachePoolPairs(coroutineContext)
-    }
-
-    GlobalScope.launch(Dispatchers.IO) {
         pingDEXSubscribers(coroutineContext)
     }
 
