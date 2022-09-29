@@ -146,20 +146,6 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
     )
 }
 
-suspend fun cachePoolPairs(coroutineContext: CoroutineContext) {
-    val blockChannel = newZQMBlockChannel()
-    while (coroutineContext.isActive) {
-        blockChannel.receive()
-        try {
-            cachePoolPairs()
-        } catch (e: Throwable) {
-            e.printStackTrace()
-        } finally {
-            delay(100)
-        }
-    }
-}
-
 private fun isTradeable(token: Token) = token.destructionHeight == -1 && token.tradeable
 suspend fun cachePoolPairs() {
     val allPools = RPC.listPoolPairs()
