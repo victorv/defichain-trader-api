@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.CoroutineContext
 
 private val logger = LoggerFactory.getLogger("DBUpdater")
-private val transactions = Channel<DBTX>(1000)
+private val transactions = Channel<DBTX>(5)
 
 private val pool = createWritableDataSource()
 
