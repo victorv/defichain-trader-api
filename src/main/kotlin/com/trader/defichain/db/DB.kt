@@ -50,10 +50,12 @@ private val template_selectPoolSwaps = """
     at.dc_address as "to",
     mempool.block_height,
     mempool.time,
-    mempool.txn
+    mempool.txn,
+    tta.dc_token_symbol
     from pool_swap 
     inner join token tf on tf.dc_token_id=token_from 
-    inner join token tt on tt.dc_token_id=token_to 
+    inner join token tt on tt.dc_token_id=token_to
+    inner join token tta on tta.dc_token_id=token_to_alt
     inner join address af on af.row_id = "from"
     inner join address at on at.row_id = "to"
     inner join tx on tx.row_id = pool_swap.tx_row_id
@@ -261,6 +263,7 @@ object DB {
             maxPrice = resultSet.getBigDecimal(9).floorPlain(),
             from = resultSet.getString(10),
             to = resultSet.getString(11),
+            tokenToAlt = resultSet.getString(15),
             block = blockEntry,
             mempool = mempoolEntry
         )
@@ -355,6 +358,7 @@ object DB {
         val to: String,
         val block: BlockEntry?,
         val mempool: MempoolEntry?,
+        val tokenToAlt: String,
     )
 
     @kotlinx.serialization.Serializable

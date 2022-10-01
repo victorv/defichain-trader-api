@@ -54,7 +54,7 @@ object AccountHistory {
         )
     }
 
-    suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): Double? {
+    suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): TokenIndex.TokenAmount? {
         if (poolSwap.toAddress == "") {
             return null
         }
@@ -96,21 +96,21 @@ object AccountHistory {
 
         if (amounts.size == 1) {
             if (poolSwap.fromToken == poolSwap.toToken) {
-                return poolSwap.fromAmount + firstAmount.amount
+                return TokenIndex.TokenAmount(firstAmount.tokenID, poolSwap.fromAmount + firstAmount.amount)
             }
             return null
         }
 
         val lastAmount = amounts.last()
         check(lastAmount.amount != null)
-        check(amounts.size == 2 && lastAmount.amount >= 0.0 && lastAmount.tokenID == poolSwap.toToken) {
+        check(amounts.size == 2 && lastAmount.amount >= 0.0) {
             err(
                 "amounts" to amounts,
                 "lastAmount" to lastAmount,
                 "poolSwap" to poolSwap
             )
         }
-        return lastAmount.amount
+        return TokenIndex.TokenAmount(lastAmount.tokenID, lastAmount.amount)
     }
 
     private suspend fun getPoolSwapAmounts(owner: String, blockHeight: Long, txn: Int): List<TokenIndex.TokenAmount> {
