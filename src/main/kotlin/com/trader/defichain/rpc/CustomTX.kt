@@ -1,5 +1,6 @@
 package com.trader.defichain.rpc
 
+import com.trader.defichain.indexer.TokenIndex
 import kotlinx.serialization.json.*
 
 private val numberMatcher = "^\\d+$".toRegex()
@@ -137,7 +138,7 @@ object CustomTX {
         val toToken: Int,
         val fromAmount: Double,
         val maxPrice: Double,
-        var amountTo: Double? = null,
+        var amountTo: TokenIndex.TokenAmount? = null,
     )
 
     data class AddPoolLiquidity(

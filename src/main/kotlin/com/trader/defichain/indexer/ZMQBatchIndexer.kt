@@ -145,7 +145,10 @@ private suspend fun indexZMQPair(
         val swap = customTX.asPoolSwap()
 
         if (zmqPair.isConfirmed) {
-            swap.amountTo = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
+            val tokenAmount = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
+            if(tokenAmount != null) {
+                swap.amountTo = tokenAmount
+            }
         }
 
         dbTX.insertPoolSwap(txRowID, swap)

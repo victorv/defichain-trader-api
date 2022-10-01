@@ -69,22 +69,24 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                     )
                 ).estimate
 
+                val tokenTo = getTokenSymbol(swap.toToken.toString())
                 val row = DB.PoolSwapRow(
                     txID = rawTX.txID,
                     fee = fee.floorPlain(),
-                    tokenFrom = getTokenSymbol(swap.fromToken.toString()),
-                    tokenTo = getTokenSymbol(swap.toToken.toString()),
                     amountFrom = BigDecimal(swap.fromAmount).floorPlain(),
                     amountTo = BigDecimal(amountTo).floorPlain(),
+                    tokenFrom = getTokenSymbol(swap.fromToken.toString()),
+                    tokenTo = tokenTo,
+                    tokenToAlt = tokenTo,
+                    maxPrice = BigDecimal(swap.maxPrice).floorPlain(),
                     from = swap.fromAddress,
                     to = swap.toAddress,
-                    maxPrice = BigDecimal(swap.maxPrice).floorPlain(),
+                    block = null,
                     mempool = DB.MempoolEntry(
                         blockHeight = block.height,
                         txn = txn,
                         time = time,
                     ),
-                    block = null,
                 )
 
                 val json = Json.encodeToString(row)
