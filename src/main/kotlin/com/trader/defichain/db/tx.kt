@@ -27,10 +27,11 @@ RETURNING row_id;
 """
 
 private const val template_insertTX = """
-INSERT INTO tx (dc_tx_id, tx_type_row_id, fee, confirmed) VALUES (?, ?, ?, ?)
+INSERT INTO tx (dc_tx_id, tx_type_row_id, fee, confirmed, valid) VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (dc_tx_id) DO UPDATE SET 
 fee = ?,
-confirmed = ?
+confirmed = ?,
+valid = ?
 RETURNING row_id;
 """
 
@@ -62,7 +63,7 @@ fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater 
     }
 }
 
-fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, isConfirmed: Boolean): Future<Long> {
+fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, isConfirmed: Boolean, valid: Boolean): Future<Long> {
     val rowID = Future<Long>()
 
     doLater {
@@ -73,9 +74,11 @@ fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, isConfirmed: Bo
             it.setInt(2, txTypeRowID)
             it.setBigDecimal(3, fee)
             it.setBoolean(4, isConfirmed)
+            it.setBoolean(5, valid)
 
-            it.setBigDecimal(5, fee)
-            it.setBoolean(6, isConfirmed)
+            it.setBigDecimal(6, fee)
+            it.setBoolean(7, isConfirmed)
+            it.setBoolean(8, valid)
             rowID.set(upsertReturning(it))
         }
     }

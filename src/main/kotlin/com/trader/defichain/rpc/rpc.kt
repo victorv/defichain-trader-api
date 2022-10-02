@@ -65,9 +65,7 @@ class RPC {
             if (result is JsonPrimitive || result == null) {
                 return null
             }
-            val record = decoder.decodeFromJsonElement<CustomTX.Record>(result)
-            check(record.valid) { "Invalid custom TX: $record" }
-            return record
+            return decoder.decodeFromJsonElement<CustomTX.Record>(result)
         }
 
         suspend fun listPoolPairs(): Map<String, PoolPair> = getValue(

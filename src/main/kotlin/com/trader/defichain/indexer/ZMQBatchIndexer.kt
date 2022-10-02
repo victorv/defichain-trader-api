@@ -121,7 +121,7 @@ private suspend fun indexZMQPair(
     if (!whitelistedTXTypes.contains(customTX.type)) return
 
     val fee = calculateFee(tx, zmqBatch.txContext)
-    val txRowID = dbTX.insertTX(tx.txID, customTX.type, fee, zmqPair.isConfirmed)
+    val txRowID = dbTX.insertTX(tx.txID, customTX.type, fee, zmqPair.isConfirmed, customTX.valid)
 
     if (rawTX != null) {
         dbTX.insertRawTX(txRowID, rawTX)
