@@ -65,7 +65,8 @@ mempool_swap as (
  -1
  from pool_swap
  inner join mempool on mempool.tx_row_id = pool_swap.tx_row_id
- where 
+ where
+  pool_swap.tx_row_id NOT IN (select tx_row_id from minted_swap) AND
   (? IS NULL or block_height <= ?) AND
   pool_swap.tx_row_id <> ANY(?) AND
   (? IS NULL or token_from = ?) AND
