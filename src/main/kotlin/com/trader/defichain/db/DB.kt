@@ -3,8 +3,10 @@ package com.trader.defichain.db
 import com.trader.defichain.dex.getOraclePriceForSymbol
 import com.trader.defichain.util.floorPlain
 import kotlinx.serialization.json.*
+import org.intellij.lang.annotations.Language
 import org.postgresql.ds.PGSimpleDataSource
 import java.math.BigDecimal
+import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.Types
@@ -36,35 +38,74 @@ group by token.dc_token_symbol;
 """.trimIndent()
 
 // TODO for optimal performance some filters should be applied to the join directly and not be part of the where clause
+@Language("sql")
 private val template_selectPoolSwaps = """
-    select tx.dc_tx_id as tx_id,
-    minted_tx.block_height, 
-    minted_tx.txn, 
-    tx.fee, 
-    amount_from, 
-    amount_to, 
-    tf.dc_token_symbol as token_from, 
-    tt.dc_token_symbol as token_to,
-    max_price,
-    af.dc_address as "from",
-    at.dc_address as "to",
-    mempool.block_height,
-    mempool.time,
-    mempool.txn,
-    tta.dc_token_symbol
-    from pool_swap 
-    inner join token tf on tf.dc_token_id=token_from 
-    inner join token tt on tt.dc_token_id=token_to
-    inner join token tta on tta.dc_token_id=token_to_alt
-    inner join address af on af.row_id = "from"
-    inner join address at on at.row_id = "to"
-    inner join tx on tx.row_id = pool_swap.tx_row_id
-    left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
-    left join mempool on mempool.tx_row_id = pool_swap.tx_row_id
-    inner join block on block.height = minted_tx.block_height OR block.height = mempool.block_height + 1
-    where 1=1
-    order by coalesce(minted_tx.block_height, mempool.block_height) DESC, coalesce(minted_tx.txn, -1)
-    limit 26 offset 0;
+with minted_swap as (
+ select 
+ pool_swap.tx_row_id,
+ block_height,
+ txn
+ from pool_swap
+ inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
+ where 
+  (? IS NULL or block_height <= ?) AND
+  pool_swap.tx_row_id <> ANY(?) AND
+  (? IS NULL or token_from = ?) AND
+  (? IS NULL or token_to = ?) AND 
+  (? IS NULL or ("from" = ? or "to" = ?)) AND
+  (? IS NULL or block_height = ?) AND
+  (? IS NULL or pool_swap.tx_row_id = ?)
+ order by minted_tx.block_height DESC, minted_tx.txn
+ limit 26 offset 0
+),
+mempool_swap as (
+ select 
+ mempool.tx_row_id,
+ block_height,
+ -1
+ from pool_swap
+ inner join mempool on mempool.tx_row_id = pool_swap.tx_row_id
+ where 
+  (? IS NULL or block_height <= ?) AND
+  pool_swap.tx_row_id <> ANY(?) AND
+  (? IS NULL or token_from = ?) AND
+  (? IS NULL or token_to = ?) AND
+  (? IS NULL or ("from" = ? or "to" = ?)) AND
+  (? IS NULL or block_height = ?) AND
+  (? IS NULL or pool_swap.tx_row_id = ?)
+ order by mempool.block_height DESC, mempool.txn
+ limit 26
+),
+swaps as (
+select * from minted_swap union all select * from mempool_swap order by block_height DESC, txn limit 26
+)
+select
+tx.dc_tx_id as tx_id,
+minted_tx.block_height, 
+minted_tx.txn, 
+tx.fee, 
+amount_from, 
+amount_to, 
+tf.dc_token_symbol as token_from, 
+tt.dc_token_symbol as token_to,
+max_price,
+af.dc_address as "from",
+at.dc_address as "to",
+mempool.block_height,
+mempool.time,
+mempool.txn,
+tta.dc_token_symbol,
+tx.row_id
+from pool_swap
+inner join swaps on swaps.tx_row_id = pool_swap.tx_row_id
+inner join token tf on tf.dc_token_id=token_from 
+inner join token tt on tt.dc_token_id=token_to
+inner join token tta on tta.dc_token_id=token_to_alt
+inner join address af on af.row_id = "from"
+inner join address at on at.row_id = "to"
+inner join tx on tx.row_id = pool_swap.tx_row_id
+left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
+left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
 val connectionPool = createReadonlyDataSource()
@@ -93,12 +134,6 @@ fun upsertReturning(statement: PreparedStatement): Long {
         check(!resultSet.next())
         return rowID
     }
-}
-
-
-fun PreparedStatement.setDoubleOrNull(parameterIndex: Int, double: Double?) {
-    if (double == null) setNull(parameterIndex, Types.DOUBLE)
-    else setDouble(parameterIndex, double)
 }
 
 object DB {
@@ -156,38 +191,75 @@ object DB {
     }
 
     fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
-        val conditions = Conditions(filter.sort, filter.pager)
-        conditions.addIfPresent("tf.dc_token_symbol = ?", filter.fromTokenSymbol)
-        conditions.addIfPresent("tt.dc_token_symbol = ?", filter.toTokenSymbol)
+        connectionPool.connection.use { connection ->
+            var maxBlockHeight: Long? = null
+            var blacklist = arrayOf<Long>(-1)
+            var fromTokenID: Int? = null
+            var toTokenID: Int? = null
+            var addressRowID: Long? = null
+            var blockHeight: Long? = null
+            var txRowID: Long? = null
 
-        val filterString = filter.filterString
-        if (filterString != null) {
-
-            // TODO research if address length can be >= 64
-            if (filterString.length != 64) {
-                conditions.addIfPresent(
-                    "(af.dc_address = ? OR at.dc_address = ?)",
-                    filterString
-                )
-            } else {
-                conditions.addIfPresent(
-                    "(tx.dc_tx_id = ? OR block.hash = ?)",
-                    filterString
-                )
+            if (filter.fromTokenSymbol != null) {
+                fromTokenID = selectTokenID(connection, filter.fromTokenSymbol)
             }
-        }
 
-        if (filter.pager != null) {
-            conditions.addIfPresent(
-                "(minted_tx.block_height <= ? OR mempool.block_height + 1 <= ?)",
-                filter.pager.maxBlockHeight
-            )
-        }
+            if (filter.toTokenSymbol != null) {
+                toTokenID = selectTokenID(connection, filter.toTokenSymbol)
+            }
 
-        val poolSwaps = ArrayList<PoolSwapRow>()
-        connectionPool.connection.use {
-            it.prepareStatement(conditions.updatedQuery(template_selectPoolSwaps)).use { statement ->
-                conditions.setData(1, statement)
+            val filterString = filter.filterString
+            if (filterString != null) {
+
+                // TODO research if address length can be >= 64
+                if (filterString.length != 64) {
+                    addressRowID = selectAddressRowID(connection, filterString)
+                } else {
+                    blockHeight = selectBlockHeight(connection, filterString)
+                    if (blockHeight == null) {
+                        txRowID = selectTransactionRowID(connection, filterString)
+                    }
+                }
+            }
+
+            if (filter.pager != null) {
+                maxBlockHeight = filter.pager.maxBlockHeight
+                blacklist = filter.pager.blacklist.toTypedArray()
+            }
+            val blacklistArray = connection.createArrayOf("BIGINT", blacklist)
+
+            val poolSwaps = ArrayList<PoolSwapRow>()
+            connection.prepareStatement(template_selectPoolSwaps).use { statement ->
+                statement.setObject(1, maxBlockHeight, Types.BIGINT)
+                statement.setObject(2, maxBlockHeight, Types.BIGINT)
+                statement.setArray(3, blacklistArray)
+                statement.setObject(4, fromTokenID, Types.INTEGER)
+                statement.setObject(5, fromTokenID, Types.INTEGER)
+                statement.setObject(6, toTokenID, Types.INTEGER)
+                statement.setObject(7, toTokenID, Types.INTEGER)
+                statement.setObject(8, addressRowID, Types.BIGINT)
+                statement.setObject(9, addressRowID, Types.BIGINT)
+                statement.setObject(10, addressRowID, Types.BIGINT)
+                statement.setObject(11, blockHeight, Types.BIGINT)
+                statement.setObject(12, blockHeight, Types.BIGINT)
+                statement.setObject(13, txRowID, Types.BIGINT)
+                statement.setObject(14, txRowID, Types.BIGINT)
+
+                statement.setObject(15, maxBlockHeight, Types.BIGINT)
+                statement.setObject(16, maxBlockHeight, Types.BIGINT)
+                statement.setArray(17, blacklistArray)
+                statement.setObject(18, fromTokenID, Types.INTEGER)
+                statement.setObject(19, fromTokenID, Types.INTEGER)
+                statement.setObject(20, toTokenID, Types.INTEGER)
+                statement.setObject(21, toTokenID, Types.INTEGER)
+                statement.setObject(22, addressRowID, Types.BIGINT)
+                statement.setObject(23, addressRowID, Types.BIGINT)
+                statement.setObject(24, addressRowID, Types.BIGINT)
+                statement.setObject(25, blockHeight, Types.BIGINT)
+                statement.setObject(26, blockHeight, Types.BIGINT)
+                statement.setObject(27, txRowID, Types.BIGINT)
+                statement.setObject(28, txRowID, Types.BIGINT)
+
                 statement.executeQuery().use { resultSet ->
 
                     while (resultSet.next()) {
@@ -201,8 +273,64 @@ object DB {
             if (poolSwaps.isEmpty()) {
                 return poolSwaps
             }
+            return poolSwaps
         }
-        return poolSwaps
+    }
+
+    private fun selectBlockHeight(
+        connection: Connection,
+        hash: String,
+    ): Long? {
+        val sql = "select height from block where hash = ?"
+        connection.prepareStatement(sql).use { statement ->
+            statement.setString(1, hash)
+            statement.executeQuery().use { resultSet ->
+                if (!resultSet.next()) return null
+                return resultSet.getLong(1)
+            }
+        }
+    }
+
+    private fun selectTransactionRowID(
+        connection: Connection,
+        txID: String,
+    ): Long? {
+        val sql = "select row_id from tx where dc_tx_id = ?"
+        connection.prepareStatement(sql).use { statement ->
+            statement.setString(1, txID)
+            statement.executeQuery().use { resultSet ->
+                if (!resultSet.next()) return null
+                return resultSet.getLong(1)
+            }
+        }
+    }
+
+    private fun selectAddressRowID(
+        connection: Connection,
+        address: String,
+    ): Long? {
+        val sql = "select row_id from address where dc_address = ?"
+        connection.prepareStatement(sql).use { statement ->
+            statement.setString(1, address)
+            statement.executeQuery().use { resultSet ->
+                if (!resultSet.next()) return null
+                return resultSet.getLong(1)
+            }
+        }
+    }
+
+    private fun selectTokenID(
+        connection: Connection,
+        tokenSymbol: String,
+    ): Int? {
+        val sql = "select dc_token_id from token where dc_token_symbol = ?"
+        connection.prepareStatement(sql).use { statement ->
+            statement.setString(1, tokenSymbol)
+            statement.executeQuery().use { resultSet ->
+                if (!resultSet.next()) return null
+                return resultSet.getInt(1)
+            }
+        }
     }
 
     fun tokensSoldRecently() = calcTokenAggregate(template_tokensSoldRecently)
@@ -264,50 +392,10 @@ object DB {
             from = resultSet.getString(10),
             to = resultSet.getString(11),
             tokenToAlt = resultSet.getString(15),
+            id = resultSet.getLong(16),
             block = blockEntry,
             mempool = mempoolEntry
         )
-    }
-
-    private class Conditions(val sortOrder: String?, val pager: Pager?) {
-
-        private val conditions = ArrayList<Condition>()
-        private var offset = 0
-
-        private fun addCondition(condition: Condition) {
-            conditions.add(condition)
-            offset += condition.sql.count { it == '?' }
-        }
-
-        fun addIfPresent(sql: String, data: Any?) {
-            if (data != null) {
-                addCondition(Condition(sql = sql, offset = offset, data = data as Object))
-            }
-        }
-
-        fun updatedQuery(sql: String): String {
-            var modifiedSQL = sql
-
-            if (conditions.isNotEmpty()) {
-                val whereClause = conditions.joinToString(" AND ") { it.sql }
-                modifiedSQL = sql.replace("1=1", whereClause)
-            }
-
-            if (sortOrder != null) {
-                modifiedSQL = modifiedSQL.replace("order by", "order by $sortOrder, ")
-            }
-
-            if(pager != null) {
-                modifiedSQL = modifiedSQL.replace("offset 0", "offset ${pager.offset}")
-            }
-            return modifiedSQL
-        }
-
-        fun setData(startIndex: Int, statement: PreparedStatement) {
-            for (condition in conditions) {
-                condition.setParameter(statement, startIndex)
-            }
-        }
     }
 
     @kotlinx.serialization.Serializable
@@ -318,19 +406,6 @@ object DB {
         val aggregateUSD: Double,
         val mostRecentBlockHeight: Long,
     )
-
-    data class Condition(
-        val sql: String,
-        val offset: Int,
-        val data: Object,
-    ) {
-        fun setParameter(statement: PreparedStatement, startIndex: Int) {
-            val placeholderCount = sql.count { it == '?' }
-            repeat(placeholderCount) { n ->
-                statement.setObject(startIndex + offset + n, data)
-            }
-        }
-    }
 
     @kotlinx.serialization.Serializable
     data class BlockEntry(
@@ -359,12 +434,13 @@ object DB {
         val block: BlockEntry?,
         val mempool: MempoolEntry?,
         val tokenToAlt: String,
+        val id: Long,
     )
 
     @kotlinx.serialization.Serializable
     data class Pager(
         val maxBlockHeight: Long,
-        val offset: Int,
+        val blacklist: List<Long>,
     )
 
     @kotlinx.serialization.Serializable

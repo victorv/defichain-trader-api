@@ -82,6 +82,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                     from = swap.fromAddress,
                     to = swap.toAddress,
                     block = null,
+                    id = -1,
                     mempool = DB.MempoolEntry(
                         blockHeight = block.height,
                         txn = txn,
