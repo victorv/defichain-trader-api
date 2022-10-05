@@ -33,16 +33,18 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
                         missingBlocks = DB.selectAll<Int>("missing_blocks").iterator()
                     }
 
-                    blockHeight = missingBlocks.next()
+                    if (missingBlocks.hasNext()) {
+                        blockHeight = missingBlocks.next()
 
-                    val blockHash = RPC.getValue<String>(RPCMethod.GET_BLOCK_HASH, JsonPrimitive(blockHeight))
-                    val block = RPC.getValue<Block>(RPCMethod.GET_BLOCK, JsonPrimitive(blockHash), JsonPrimitive(2))
+                        val blockHash = RPC.getValue<String>(RPCMethod.GET_BLOCK_HASH, JsonPrimitive(blockHeight))
+                        val block = RPC.getValue<Block>(RPCMethod.GET_BLOCK, JsonPrimitive(blockHash), JsonPrimitive(2))
 
-                    val dbtx = DBTX("missing block at block height ${block.height}")
-                    indexZMQBatches(dbtx, block)
-                    dbtx.submit()
+                        val dbtx = DBTX("missing block at block height ${block.height}")
+                        indexZMQBatches(dbtx, block)
+                        dbtx.submit()
 
-                    logger.info("Indexed missing block at block height ${block.height}")
+                        logger.info("Indexed missing block at block height ${block.height}")
+                    }
                 } catch (e: Throwable) {
                     logger.error(
                         "Failed to process missing block at height $blockHeight; skipping block and suspending processing until the next ZMQ batch is available",
@@ -129,7 +131,7 @@ private suspend fun indexZMQPair(
 
     val txn = tx.txn
 
-    if(zmqPair.isConfirmed) {
+    if (zmqPair.isConfirmed) {
         val mintedTX = DB.MintedTX(
             txID = tx.txID,
             type = customTX.type,
@@ -146,7 +148,7 @@ private suspend fun indexZMQPair(
 
         if (zmqPair.isConfirmed) {
             val tokenAmount = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
-            if(tokenAmount != null) {
+            if (tokenAmount != null) {
                 swap.amountTo = tokenAmount
             }
         }
