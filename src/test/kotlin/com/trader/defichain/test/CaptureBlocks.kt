@@ -29,7 +29,9 @@ suspend fun main() {
 
     val blockCount = RPC.getValue<Int>(RPCMethod.GET_BLOCK_COUNT)
     val tokens = RPC.listTokens()
+        .entries.associate { it.key.toString() to it.value }
     val poolPairs = RPC.listPoolPairs()
+        .entries.associate { it.key.toString() to it.value }
     val prices = RPC.listPrices()
     checkBlockCountIs(blockCount)
 

@@ -2,19 +2,19 @@ package com.trader.defichain.dex
 
 import com.trader.defichain.util.containsSwapPath
 
-private val emptyPath = emptyList<List<String>>()
-private val invalidConnection = Connection("-1", TokenNode("-1"))
+private val emptyPath = emptyList<List<Int>>()
+private val invalidConnection = Connection(-1, TokenNode(-1))
 
-private class Connection(val poolId: String, val token: TokenNode)
-private class TokenNode(val tokenId: String) {
+private class Connection(val poolId: Int, val token: TokenNode)
+private class TokenNode(val tokenId: Int) {
 
-    val connected = HashMap<String, Connection>()
+    val connected = HashMap<Int, Connection>()
 
     fun findPaths(
-        toTokenId: String,
+        toTokenId: Int,
         path: Array<Connection>,
         depth: Int,
-        paths: MutableList<List<String>>,
+        paths: MutableList<List<Int>>,
     ) {
         for (connection in connected.values) {
             val connectedToken = connection.token
@@ -34,23 +34,23 @@ private class TokenNode(val tokenId: String) {
 
 class PoolTree {
 
-    private val tokens = HashMap<String, TokenNode>()
+    private val tokens = HashMap<Int, TokenNode>()
 
-    fun addPool(poolId: String, poolPair: PoolPair) {
+    fun addPool(poolId: Int, poolPair: PoolPair) {
         val tokenA = tokens.getOrPut(poolPair.idTokenA) { TokenNode(poolPair.idTokenA) }
         val tokenB = tokens.getOrPut(poolPair.idTokenB) { TokenNode(poolPair.idTokenB) }
         tokenA.connected[poolPair.idTokenB] = Connection(poolId, tokenB)
         tokenB.connected[poolPair.idTokenA] = Connection(poolId, tokenA)
     }
 
-    fun getSwapPaths(tokenFromSymbol: String, tokenToSymbol: String): List<List<String>> {
+    fun getSwapPaths(tokenFromSymbol: String, tokenToSymbol: String): List<List<Int>> {
         val fromId = getTokenId(tokenFromSymbol) ?: return emptyPath
         val toId = getTokenId(tokenToSymbol) ?: return emptyPath
 
         val tokenFrom = tokens[fromId] ?: return emptyPath
         val tokenTo = tokens[toId] ?: return emptyPath
 
-        val paths = mutableListOf<List<String>>()
+        val paths = mutableListOf<List<Int>>()
         tokenFrom.findPaths(tokenTo.tokenId, Array(8) { invalidConnection }, 0, paths)
 
         paths.sortBy { it.size }

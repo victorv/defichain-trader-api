@@ -25,7 +25,7 @@ object TokenIndex {
 
     fun getSymbol(tokenID: Int) = allTokenSymbolsByTokenID.getValue(tokenID)
     fun getPoolID(tokenA: Int, tokenB: Int): Int {
-        val tokens = setOf(tokenA.toString(), tokenB.toString())
+        val tokens = setOf(tokenA, tokenB)
         return poolPairs.entries
             .first { tokens.contains(it.value.idTokenA) && tokens.contains(it.value.idTokenB) }
             .key

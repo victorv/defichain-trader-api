@@ -2,18 +2,35 @@ package com.trader.defichain.dex
 
 import com.trader.defichain.util.floor
 import kotlinx.serialization.Contextual
-import kotlinx.serialization.SerialName
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import java.math.BigDecimal
 
 private val PRECISION = BigDecimal(10000)
 
+object TokenIDSerializer : KSerializer<Int> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("TokenID", PrimitiveKind.INT)
+    override fun serialize(encoder: Encoder, value: Int) {
+        encoder.encodeString(value.toString())
+    }
+
+    override fun deserialize(decoder: Decoder): Int {
+        return decoder.decodeString().toInt()
+    }
+}
+
 @kotlinx.serialization.Serializable
 data class PoolPair(
     val symbol: String,
-    val name: String,
     val status: Boolean,
-    val idTokenA: String,
-    val idTokenB: String,
+    @kotlinx.serialization.Serializable(with = TokenIDSerializer::class)
+    val idTokenA: Int,
+    @kotlinx.serialization.Serializable(with = TokenIDSerializer::class)
+    val idTokenB: Int,
     val dexFeePctTokenA: Double? = null,
     val dexFeeInPctTokenA: Double? = null,
     val dexFeeOutPctTokenA: Double? = null,
@@ -23,19 +40,7 @@ data class PoolPair(
     val reserveA: Double,
     val reserveB: Double,
     val commission: Double? = null,
-    val totalLiquidity: Double,
-    @SerialName("reserveA/reserveB")
-    val reserveAReserveB: Double,
-    @SerialName("reserveB/reserveA")
-    val reserveBReserveA: Double,
     val tradeEnabled: Boolean,
-    val ownerAddress: String,
-    val blockCommissionA: Double,
-    val blockCommissionB: Double,
-    val rewardPct: Double,
-    val rewardLoanPct: Double,
-    val creationTx: String,
-    val creationHeight: Long
 ) {
     @Contextual
     var modifiedReserveA = BigDecimal(reserveA)

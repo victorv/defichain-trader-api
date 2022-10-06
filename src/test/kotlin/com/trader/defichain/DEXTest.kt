@@ -101,8 +101,9 @@ class DEXTest : UnitTest() {
                 }
 
                 if (delta.floor() > maxDelta.floor()) {
-                    if (!(fullNodeSwapResult.amountFrom > 9000.0 &&
-                                (fullNodeSwapResult.tokenFrom == "USDC" || fullNodeSwapResult.tokenFrom == "USDT") &&
+                    if (!((fullNodeSwapResult.tokenFrom == "DFI" ||
+                                fullNodeSwapResult.tokenFrom == "USDC" ||
+                                fullNodeSwapResult.tokenFrom == "USDT") &&
                                 fullNodeSwapResult.tokenTo == "DUSD")
                     )
                     /*

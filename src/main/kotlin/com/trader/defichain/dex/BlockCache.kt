@@ -11,33 +11,31 @@ import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.CoroutineContext
 
-private var tokensByID = mapOf<String, Token>()
-private var tokenIdsFromPoolsBySymbol = mapOf<String, String>()
+private var tokensByID = mapOf<Int, Token>()
+private var tokenIdsFromPoolsBySymbol = mapOf<String, Int>()
 private var tokensCached = "{}".toByteArray(StandardCharsets.UTF_8)
 private var poolPairsSignature = ""
-private var poolPairs = mapOf<String, PoolPair>()
+private var poolPairs = mapOf<Int, PoolPair>()
 private var poolPairsCached = "{}".toByteArray(StandardCharsets.UTF_8)
-private var swapPaths = mutableMapOf<String, List<List<String>>>()
+private var swapPaths = mutableMapOf<String, List<List<Int>>>()
 fun getCachedPoolPairs() = poolPairsCached
 
 fun getCachedTokens() = tokensCached
 
-fun getTokensByID() = HashMap(tokensByID)
-
 fun getSwapPaths(poolSwap: AbstractPoolSwap) =
     swapPaths.getOrDefault("${poolSwap.tokenFrom} to ${poolSwap.tokenTo}", emptyList())
 
-fun getTokenSymbol(tokenId: String): String {
-    val token = tokensByID[tokenId] ?: return tokenId
+fun getTokenSymbol(tokenId: Int): String {
+    val token = tokensByID[tokenId] ?: throw IllegalStateException("Unable to find token symbol for token ID $tokenId")
     return token.symbol
 }
 
-fun getTokenId(tokenSymbol: String): String? = tokenIdsFromPoolsBySymbol[tokenSymbol]
+fun getTokenId(tokenSymbol: String): Int? = tokenIdsFromPoolsBySymbol[tokenSymbol]
 
-fun getPool(poolId: String) = poolPairs.getValue(poolId)
+fun getPool(poolId: Int) = poolPairs.getValue(poolId)
 
 fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
-    var poolsForAllSwaps = mutableMapOf<String, PoolPair>()
+    var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()
     val swapResults = ArrayList<SwapResult>()
 
     for (poolSwap in poolSwaps) {
@@ -191,11 +189,11 @@ private suspend fun assignOraclePrices() {
         }
     }
 
-    val dusdToken = tokensByID["15"] ?: return
+    val dusdToken = tokensByID[15] ?: return
     dusdToken.oraclePrice = 1.0
 }
 
-private fun filterPools(allPoolPairs: Map<String, PoolPair>): Map<String, PoolPair> {
+private fun filterPools(allPoolPairs: Map<Int, PoolPair>): Map<Int, PoolPair> {
     val latestPoolPairs = allPoolPairs.filter {
         val poolPair = it.value
 
@@ -224,9 +222,9 @@ private fun filterPools(allPoolPairs: Map<String, PoolPair>): Map<String, PoolPa
     return latestPoolPairs
 }
 
-private fun cacheSwapPaths(pools: Map<String, PoolPair>, tokenIdsFromPoolsBySymbol: Map<String, String>) {
+private fun cacheSwapPaths(pools: Map<Int, PoolPair>, tokenIdsFromPoolsBySymbol: Map<String, Int>) {
     val poolTree = PoolTree()
-    val tokenIds = mutableSetOf<String>()
+    val tokenIds = mutableSetOf<Int>()
     for ((poolId, pool) in pools) {
         tokenIds.add(pool.idTokenA)
         tokenIds.add(pool.idTokenB)
@@ -241,14 +239,14 @@ private fun cacheSwapPaths(pools: Map<String, PoolPair>, tokenIdsFromPoolsBySymb
     }
 }
 
-private fun cachePoolTokensBySymbol(allTokens: Map<String, Token>, pools: Collection<PoolPair>) {
-    val tokensFromPoolsById = mutableMapOf<String, Token>()
+private fun cachePoolTokensBySymbol(allTokens: Map<Int, Token>, pools: Collection<PoolPair>) {
+    val tokensFromPoolsById = mutableMapOf<Int, Token>()
     for (pool in pools) {
         tokensFromPoolsById[pool.idTokenA] = allTokens.getValue(pool.idTokenA)
         tokensFromPoolsById[pool.idTokenB] = allTokens.getValue(pool.idTokenB)
     }
 
-    val tokenIdsBySymbol = mutableMapOf<String, String>()
+    val tokenIdsBySymbol = mutableMapOf<String, Int>()
     for ((tokenId, token) in tokensFromPoolsById) {
         check(!tokenIdsBySymbol.containsKey(token.symbol)) {
             "Duplicate symbol: ${token.symbol}"

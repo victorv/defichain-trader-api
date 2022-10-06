@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
 const val dummyAddress = "dLXs788fWMpGoar1WzDnLoNCNYyZVPPozv"
-private val decoder = Json{
+private val decoder = Json {
     ignoreUnknownKeys = true
 }
 
@@ -58,6 +58,7 @@ class RPC {
             }
             return responseBody.result
         }
+
         suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? =
             asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
 
@@ -68,16 +69,16 @@ class RPC {
             return decoder.decodeFromJsonElement<CustomTX.Record>(result)
         }
 
-        suspend fun listPoolPairs(): Map<String, PoolPair> = getValue(
+        suspend fun listPoolPairs(): Map<Int, PoolPair> = getValue<Map<String, PoolPair>>(
             RPCMethod.LIST_POOL_PAIRS,
             limit1000,
-        )
+        ).entries.associate { it.key.toInt() to it.value }
 
 
-        suspend fun listTokens(): Map<String, Token> = getValue(
+        suspend fun listTokens(): Map<Int, Token> = getValue<Map<String, Token>>(
             RPCMethod.LIST_TOKENS,
             limit1000,
-        )
+        ).entries.associate { it.key.toInt() to it.value }
 
         suspend fun listPrices(): List<OraclePrice> = getValue(
             RPCMethod.LIST_PRICES,
