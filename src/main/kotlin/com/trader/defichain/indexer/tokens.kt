@@ -40,11 +40,11 @@ object TokenIndex {
 suspend fun DBTX.indexTokens() {
 
     poolPairs.putAll(RPC.listPoolPairs().entries.associate {
-        it.key.toInt() to it.value
+        it.key to it.value
     })
 
     val tokenSymbolsByTokenID = RPC.listTokens().entries.associate {
-        it.key.toInt() to it.value.symbol
+        it.key to it.value.symbol
     }
 
     val tokenChanges = mutableMapOf<Int, String>()
@@ -58,8 +58,8 @@ suspend fun DBTX.indexTokens() {
 
     for ((poolID, pool) in poolPairs) {
         putPoolTokenIDBySymbol(poolID)
-        putPoolTokenIDBySymbol(pool.idTokenA.toInt())
-        putPoolTokenIDBySymbol(pool.idTokenB.toInt())
+        putPoolTokenIDBySymbol(pool.idTokenA)
+        putPoolTokenIDBySymbol(pool.idTokenB)
     }
 
     if (tokenChanges.isNotEmpty()) {
