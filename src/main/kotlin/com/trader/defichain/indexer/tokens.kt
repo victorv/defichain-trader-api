@@ -3,7 +3,7 @@ package com.trader.defichain.indexer
 import com.trader.defichain.db.DBTX
 import com.trader.defichain.db.insertTokens
 import com.trader.defichain.dex.getPools
-import com.trader.defichain.rpc.RPC
+import com.trader.defichain.dex.getTokens
 import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("tokens")
@@ -28,20 +28,18 @@ object TokenIndex {
     )
 }
 
-suspend fun DBTX.indexTokens() {
+fun DBTX.indexTokens() {
 
-    val tokenSymbolsByTokenID = RPC.listTokens().entries.associate {
-        it.key to it.value.symbol
-    }
+    val tokensByID = getTokens()
 
     val tokenChanges = mutableMapOf<Int, String>()
-    for ((tokenID, tokenSymbol) in tokenSymbolsByTokenID) {
+    for ((tokenID, token) in tokensByID) {
         val existingSymbol = allTokenSymbolsByTokenID[tokenID]
-        if (tokenSymbol == existingSymbol) continue
-        tokenChanges[tokenID] = tokenSymbol
+        if (token.symbol == existingSymbol) continue
+        tokenChanges[tokenID] = token.symbol
     }
 
-    allTokenSymbolsByTokenID.putAll(tokenSymbolsByTokenID)
+    allTokenSymbolsByTokenID.putAll(tokensByID.entries.associate { it.key to it.value.symbol })
 
     for ((poolID, pool) in getPools()) {
         putPoolTokenIDBySymbol(poolID)
