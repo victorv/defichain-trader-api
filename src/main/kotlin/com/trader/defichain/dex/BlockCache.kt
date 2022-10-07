@@ -21,6 +21,7 @@ fun getCachedTokens() = tokensCached
 fun getSwapPaths(poolSwap: AbstractPoolSwap) =
     swapPaths.getOrDefault("${poolSwap.tokenFrom} to ${poolSwap.tokenTo}", emptyList())
 
+fun getTokens() = tokensByID
 fun getTokenSymbol(tokenId: Int): String {
     val token = tokensByID[tokenId] ?: throw IllegalStateException("Unable to find token symbol for token ID $tokenId")
     return token.symbol
