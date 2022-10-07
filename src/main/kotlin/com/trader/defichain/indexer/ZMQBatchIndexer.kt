@@ -171,8 +171,8 @@ private suspend fun indexZMQPair(
     } else if (customTX.isRemovePoolLiquidity()) {
         val removePoolLiquidity = customTX.asRemovePoolLiquidity()
         val pool = TokenIndex.getPoolPair(removePoolLiquidity.poolID)
-        val idTokenA = pool.idTokenA.toInt()
-        val idTokenB = pool.idTokenB.toInt()
+        val idTokenA = pool.idTokenA
+        val idTokenB = pool.idTokenB
 
         val amounts = if (zmqPair.isConfirmed) AccountHistory.getPoolLiquidityAmounts(
             removePoolLiquidity.owner,
