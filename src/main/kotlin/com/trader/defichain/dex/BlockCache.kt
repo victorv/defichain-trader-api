@@ -4,12 +4,8 @@ import com.trader.defichain.http.gzip
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPC.Companion.listPrices
 import com.trader.defichain.rpc.Token
-import com.trader.defichain.zmq.newZQMBlockChannel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
-import kotlin.coroutines.CoroutineContext
 
 private var tokensByID = mapOf<Int, Token>()
 private var tokenIdsFromPoolsBySymbol = mapOf<String, Int>()
