@@ -2,13 +2,12 @@ package com.trader.defichain.indexer
 
 import com.trader.defichain.db.DBTX
 import com.trader.defichain.db.insertTokens
-import com.trader.defichain.dex.PoolPair
-import com.trader.defichain.rpc.RPC
+import com.trader.defichain.dex.getPools
+import com.trader.defichain.dex.getTokens
 import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("tokens")
 private val allTokenSymbolsByTokenID = mutableMapOf<Int, String>()
-private val poolPairs = mutableMapOf<Int, PoolPair>()
 private val pooledTokenIdentifiersByTokenSymbol = mutableMapOf<String, Int>()
 
 object TokenIndex {
@@ -21,15 +20,7 @@ object TokenIndex {
         )
     }
 
-    fun getPoolPair(poolID: Int): PoolPair = poolPairs.getValue(poolID)
-
     fun getSymbol(tokenID: Int) = allTokenSymbolsByTokenID.getValue(tokenID)
-    fun getPoolID(tokenA: Int, tokenB: Int): Int {
-        val tokens = setOf(tokenA.toString(), tokenB.toString())
-        return poolPairs.entries
-            .first { tokens.contains(it.value.idTokenA) && tokens.contains(it.value.idTokenB) }
-            .key
-    }
 
     data class TokenAmount(
         val tokenID: Int,
@@ -37,29 +28,23 @@ object TokenIndex {
     )
 }
 
-suspend fun DBTX.indexTokens() {
+fun DBTX.indexTokens() {
 
-    poolPairs.putAll(RPC.listPoolPairs().entries.associate {
-        it.key.toInt() to it.value
-    })
-
-    val tokenSymbolsByTokenID = RPC.listTokens().entries.associate {
-        it.key.toInt() to it.value.symbol
-    }
+    val tokensByID = getTokens()
 
     val tokenChanges = mutableMapOf<Int, String>()
-    for ((tokenID, tokenSymbol) in tokenSymbolsByTokenID) {
+    for ((tokenID, token) in tokensByID) {
         val existingSymbol = allTokenSymbolsByTokenID[tokenID]
-        if (tokenSymbol == existingSymbol) continue
-        tokenChanges[tokenID] = tokenSymbol
+        if (token.symbol == existingSymbol) continue
+        tokenChanges[tokenID] = token.symbol
     }
 
-    allTokenSymbolsByTokenID.putAll(tokenSymbolsByTokenID)
+    allTokenSymbolsByTokenID.putAll(tokensByID.entries.associate { it.key to it.value.symbol })
 
-    for ((poolID, pool) in poolPairs) {
+    for ((poolID, pool) in getPools()) {
         putPoolTokenIDBySymbol(poolID)
-        putPoolTokenIDBySymbol(pool.idTokenA.toInt())
-        putPoolTokenIDBySymbol(pool.idTokenB.toInt())
+        putPoolTokenIDBySymbol(pool.idTokenA)
+        putPoolTokenIDBySymbol(pool.idTokenB)
     }
 
     if (tokenChanges.isNotEmpty()) {

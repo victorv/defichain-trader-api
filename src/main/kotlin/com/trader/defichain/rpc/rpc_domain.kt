@@ -35,7 +35,7 @@ data class OraclePrice(
 
 @kotlinx.serialization.Serializable
 data class Block(
-    val height: Long,
+    val height: Int,
     val hash: String,
     val tx: List<TX>,
     val time: Long,

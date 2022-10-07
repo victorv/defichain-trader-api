@@ -1,7 +1,9 @@
 package com.trader.defichain.indexer
 
-import auctionBid
+import com.trader.defichain.db.auctionBid
 import com.trader.defichain.db.*
+import com.trader.defichain.dex.getPool
+import com.trader.defichain.dex.getPoolID
 import com.trader.defichain.rpc.AccountHistory
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.rpc.RPC
@@ -44,6 +46,8 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
                         dbtx.submit()
 
                         logger.info("Indexed missing block at block height ${block.height}")
+                    } else {
+                        break
                     }
                 } catch (e: Throwable) {
                     logger.error(
@@ -57,7 +61,6 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
             val zmqBatch = zmqBatchChannel.receive()
             try {
                 val dbtx = DBTX("ZMQ batch at block height ${zmqBatch.block.height}")
-                dbtx.indexTokens()
                 indexBlock(dbtx, zmqBatch)
                 dbtx.submit()
 
@@ -157,7 +160,7 @@ private suspend fun indexZMQPair(
     } else if (customTX.isAddPoolLiquidity()) {
         val addPoolLiquidity = customTX.asAddPoolLiquidity()
 
-        val poolID = TokenIndex.getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
+        val poolID = getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
         val sharesUnknown = TokenIndex.TokenAmount(
             tokenID = poolID,
             amount = null,
@@ -170,9 +173,9 @@ private suspend fun indexZMQPair(
         dbTX.addPoolLiquidity(txRowID, addPoolLiquidity, shares)
     } else if (customTX.isRemovePoolLiquidity()) {
         val removePoolLiquidity = customTX.asRemovePoolLiquidity()
-        val pool = TokenIndex.getPoolPair(removePoolLiquidity.poolID)
-        val idTokenA = pool.idTokenA.toInt()
-        val idTokenB = pool.idTokenB.toInt()
+        val pool = getPool(removePoolLiquidity.poolID)
+        val idTokenA = pool.idTokenA
+        val idTokenB = pool.idTokenB
 
         val amounts = if (zmqPair.isConfirmed) AccountHistory.getPoolLiquidityAmounts(
             removePoolLiquidity.owner,

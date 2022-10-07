@@ -39,12 +39,14 @@ suspend fun getResponseBody(request: HttpRequestData): String? {
     return null
 }
 
+private val x = Json { ignoreUnknownKeys = true }
+
 private fun loadCapturedBlocks(): List<CapturedBlock> {
     val testResourcesDir = getTestResourcesDirectory()
     val blocksPath = testResourcesDir.resolve("blocks.json")
     if (Files.exists(blocksPath)) {
         blocksPath.inputStream(StandardOpenOption.READ).use {
-            return Json.decodeFromStream(it)
+            return Json { ignoreUnknownKeys = true }.decodeFromStream(it)
         }
     }
     return listOf()

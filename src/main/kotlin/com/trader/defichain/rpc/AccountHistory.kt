@@ -14,7 +14,7 @@ object AccountHistory {
 
     suspend fun getPoolLiquidityShares(
         addPoolLiquidity: CustomTX.AddPoolLiquidity,
-        blockHeight: Long,
+        blockHeight: Int,
         txn: Int
     ): TokenIndex.TokenAmount? {
         val record = getRecord<PoolLiquidity>(addPoolLiquidity.owner, blockHeight, txn)
@@ -27,7 +27,7 @@ object AccountHistory {
 
     suspend fun getPoolLiquidityAmounts(
         owner: String,
-        blockHeight: Long,
+        blockHeight: Int,
         txn: Int,
         idTokenA: Int,
         idTokenB: Int,
@@ -54,7 +54,7 @@ object AccountHistory {
         )
     }
 
-    suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Long, txn: Int): TokenIndex.TokenAmount? {
+    suspend fun getPoolSwapResultFor(poolSwap: CustomTX.PoolSwap, blockHeight: Int, txn: Int): TokenIndex.TokenAmount? {
         if (poolSwap.toAddress == "") {
             return null
         }
@@ -113,7 +113,7 @@ object AccountHistory {
         return TokenIndex.TokenAmount(lastAmount.tokenID, lastAmount.amount)
     }
 
-    private suspend fun getPoolSwapAmounts(owner: String, blockHeight: Long, txn: Int): List<TokenIndex.TokenAmount> {
+    private suspend fun getPoolSwapAmounts(owner: String, blockHeight: Int, txn: Int): List<TokenIndex.TokenAmount> {
         val swap = getRecord<PoolSwap>(owner, blockHeight, txn) ?: return emptyList()
 
         check(swap.type == "PoolSwap") { err("poolSwap" to swap) }
@@ -128,7 +128,7 @@ object AccountHistory {
 
     private suspend inline fun <reified T : Record> getRecord(
         owner: String,
-        blockHeight: Long,
+        blockHeight: Int,
         txn: Int
     ): T? {
         val jsonRecord = RPC.getValue<JsonObject>(
@@ -165,7 +165,7 @@ object AccountHistory {
     interface Record {
         val type: String
         val owner: String
-        val blockHeight: Long
+        val blockHeight: Int
         val txn: Int
     }
 
@@ -174,7 +174,7 @@ object AccountHistory {
         val amounts: List<String>,
         override val type: String,
         override val owner: String,
-        override val blockHeight: Long,
+        override val blockHeight: Int,
         override val txn: Int,
     ) : Record
 
@@ -183,7 +183,7 @@ object AccountHistory {
         val amounts: List<String>,
         override val type: String,
         override val owner: String,
-        override val blockHeight: Long,
+        override val blockHeight: Int,
         override val txn: Int,
     ) : Record
 }

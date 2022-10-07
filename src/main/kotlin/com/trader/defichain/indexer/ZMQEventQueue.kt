@@ -1,5 +1,7 @@
 package com.trader.defichain.indexer
 
+import com.trader.defichain.db.DBTX
+import com.trader.defichain.db.insertPoolPairs
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
@@ -36,7 +38,17 @@ private suspend fun processEvent(event: ZMQEvent) {
     if (event.type == ZMQEventType.HASH_BLOCK) {
         try {
             val blockHash = JsonPrimitive(event.payload)
-            block = RPC.getValue<Block>(RPCMethod.GET_BLOCK, blockHash, JsonPrimitive(2))
+            val newBlock = RPC.getValue<Block>(RPCMethod.GET_BLOCK, blockHash, JsonPrimitive(2))
+            block = newBlock
+
+            val poolPairs = event.poolPairs
+            val oraclePrices = event.oraclePrices
+            if(poolPairs != null && oraclePrices != null) {
+                val dbtx = DBTX("Tokens, pool pairs and oracle prices at block height ${newBlock.height}")
+                dbtx.insertPoolPairs(newBlock, poolPairs, oraclePrices)
+                dbtx.submit()
+            }
+
             announceZMQBlock(block!!, rawTransactions.values.toList())
         } finally {
             rawTransactions.clear()
@@ -65,7 +77,7 @@ private suspend fun processEvent(event: ZMQEvent) {
 
 data class ZMQRawTX(
     val time: Long,
-    val blockHeight: Long,
+    val blockHeight: Int,
     val hex: String,
     val txn: Int,
 )

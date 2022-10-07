@@ -1,7 +1,5 @@
-import com.trader.defichain.db.DBTX
-import com.trader.defichain.db.insertAddress
-import com.trader.defichain.db.insertTokens
-import com.trader.defichain.db.insertVault
+package com.trader.defichain.db
+
 import com.trader.defichain.rpc.CustomTX
 import com.trader.defichain.util.Future
 

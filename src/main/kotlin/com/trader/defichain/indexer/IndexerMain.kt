@@ -6,6 +6,7 @@ import com.trader.defichain.config.rpcConfig
 import com.trader.defichain.config.zmqConfig
 import com.trader.defichain.db.DBTX
 import com.trader.defichain.db.updateDatabase
+import com.trader.defichain.dex.cachePoolPairs
 import com.trader.defichain.zmq.receiveFullNodeEvents
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
@@ -25,6 +26,8 @@ private fun loadIndexerConfig(path: String) {
 fun main(vararg args: String) {
     loadIndexerConfig(args[0])
     runBlocking {
+        cachePoolPairs()
+
         val dbtx = DBTX("index tokens")
         dbtx.indexTokens()
         dbtx.submit()

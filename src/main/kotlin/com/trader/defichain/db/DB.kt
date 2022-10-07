@@ -377,7 +377,7 @@ object DB {
 
         val blockHeightMempool = resultSet.getObject(12)
         val mempoolEntry = if (blockHeightMempool == null) null else MempoolEntry(
-            blockHeight = blockHeightMempool as Long,
+            blockHeight = blockHeightMempool as Int,
             time = resultSet.getLong(13),
             txn = resultSet.getInt(14),
         )
@@ -416,7 +416,7 @@ object DB {
 
     @kotlinx.serialization.Serializable
     data class MempoolEntry(
-        val blockHeight: Long,
+        val blockHeight: Int,
         val txn: Int,
         val time: Long,
     )
@@ -494,7 +494,7 @@ object DB {
 
     data class MintedTX(
         val txID: String,
-        val blockHeight: Long,
+        val blockHeight: Int,
         val blockTime: Long,
         val txn: Int,
         val type: String,
