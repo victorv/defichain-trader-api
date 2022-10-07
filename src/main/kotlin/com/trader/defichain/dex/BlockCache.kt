@@ -150,7 +150,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
 }
 
 private fun isTradeable(token: Token) = token.destructionHeight == -1 && token.tradeable
-suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>>  {
+suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
     val allPools = RPC.listPoolPairs()
 
     val signature = allPools.keys.sorted().joinToString(",")
@@ -167,7 +167,9 @@ suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>>  {
 
     if (isNewSignature) {
         cachePoolTokensBySymbol(tokensByID, latestPools.values)
-        cacheSwapPaths(latestPools, tokenIdsFromPoolsBySymbol)
+        cacheSwapPaths(latestPools.filter {
+            !it.value.symbol.contains("BURN")
+        }, tokenIdsFromPoolsBySymbol)
     }
 
     poolPairs = latestPools
