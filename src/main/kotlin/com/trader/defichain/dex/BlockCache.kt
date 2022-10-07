@@ -32,7 +32,15 @@ fun getTokenSymbol(tokenId: Int): String {
 
 fun getTokenId(tokenSymbol: String): Int? = tokenIdsFromPoolsBySymbol[tokenSymbol]
 
+fun getPools() = poolPairs
 fun getPool(poolId: Int) = poolPairs.getValue(poolId)
+
+fun getPoolID(tokenA: Int, tokenB: Int): Int {
+    val tokens = setOf(tokenA, tokenB)
+    return poolPairs.entries
+        .first { tokens.contains(it.value.idTokenA) && tokens.contains(it.value.idTokenB) }
+        .key
+}
 
 fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
     var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()

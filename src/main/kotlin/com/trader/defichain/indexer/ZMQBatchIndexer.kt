@@ -2,6 +2,8 @@ package com.trader.defichain.indexer
 
 import auctionBid
 import com.trader.defichain.db.*
+import com.trader.defichain.dex.getPool
+import com.trader.defichain.dex.getPoolID
 import com.trader.defichain.rpc.AccountHistory
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.rpc.RPC
@@ -157,7 +159,7 @@ private suspend fun indexZMQPair(
     } else if (customTX.isAddPoolLiquidity()) {
         val addPoolLiquidity = customTX.asAddPoolLiquidity()
 
-        val poolID = TokenIndex.getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
+        val poolID = getPoolID(addPoolLiquidity.tokenA, addPoolLiquidity.tokenB)
         val sharesUnknown = TokenIndex.TokenAmount(
             tokenID = poolID,
             amount = null,
@@ -170,7 +172,7 @@ private suspend fun indexZMQPair(
         dbTX.addPoolLiquidity(txRowID, addPoolLiquidity, shares)
     } else if (customTX.isRemovePoolLiquidity()) {
         val removePoolLiquidity = customTX.asRemovePoolLiquidity()
-        val pool = TokenIndex.getPoolPair(removePoolLiquidity.poolID)
+        val pool = getPool(removePoolLiquidity.poolID)
         val idTokenA = pool.idTokenA
         val idTokenB = pool.idTokenB
 
