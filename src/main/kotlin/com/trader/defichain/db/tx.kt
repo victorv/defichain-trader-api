@@ -37,7 +37,7 @@ RETURNING row_id;
 
 fun DBTX.insertBlock(block: Block) = doLater {
     connection.prepareStatement(template_insertBlock).use {
-        it.setLong(1, block.height)
+        it.setInt(1, block.height)
         it.setLong(2, block.time)
         it.setString(3, block.hash)
         insertOrDoNothing(it)
@@ -48,7 +48,7 @@ fun DBTX.insertRawTX(txRowID: Future<Long>, tx: ZMQRawTX) = doLater {
     connection.prepareStatement(template_insertMempoolTX).use {
         it.setLong(1, txRowID.get())
         it.setLong(2, tx.time)
-        it.setLong(3, tx.blockHeight)
+        it.setInt(3, tx.blockHeight)
         it.setInt(4, tx.txn)
         insertOrDoNothing(it)
     }
@@ -57,7 +57,7 @@ fun DBTX.insertRawTX(txRowID: Future<Long>, tx: ZMQRawTX) = doLater {
 fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater {
     connection.prepareStatement(template_insertMintedTX).use {
         it.setLong(1, txRowID.get())
-        it.setLong(2, mintedTX.blockHeight)
+        it.setInt(2, mintedTX.blockHeight)
         it.setInt(3, mintedTX.txn)
         insertOrDoNothing(it)
     }

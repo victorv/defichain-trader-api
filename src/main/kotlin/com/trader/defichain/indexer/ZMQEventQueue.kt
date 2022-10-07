@@ -65,7 +65,7 @@ private suspend fun processEvent(event: ZMQEvent) {
 
 data class ZMQRawTX(
     val time: Long,
-    val blockHeight: Long,
+    val blockHeight: Int,
     val hex: String,
     val txn: Int,
 )

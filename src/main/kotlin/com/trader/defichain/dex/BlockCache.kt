@@ -145,7 +145,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
 }
 
 private fun isTradeable(token: Token) = token.destructionHeight == -1 && token.tradeable
-suspend fun cachePoolPairs() {
+suspend fun cachePoolPairs(): Map<Int, PoolPair>?  {
     val allPools = RPC.listPoolPairs()
 
     val signature = allPools.keys.sorted().joinToString(",")
@@ -157,7 +157,7 @@ suspend fun cachePoolPairs() {
 
     val latestPools = filterPools(allPools)
     if (latestPools == poolPairs) {
-        return
+        return null
     }
 
     if (isNewSignature) {
@@ -169,6 +169,7 @@ suspend fun cachePoolPairs() {
     poolPairsCached = gzip(poolPairs)
 
     assignOraclePrices()
+    return poolPairs
 }
 
 fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
