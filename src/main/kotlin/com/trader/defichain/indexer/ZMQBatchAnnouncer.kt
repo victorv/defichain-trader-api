@@ -68,7 +68,7 @@ private suspend fun asZMQBatch(block: Block, rawTransactions: List<ZMQRawTX>): Z
         transactionPairs.add(ZMQPair(null, tx, true))
     }
 
-    val txContext = block.tx.associateBy { it.txID }
+    val txContext = transactionPairs.associate { it.tx.txID to it.tx }
     return ZMQBatch(block, transactionPairs, txContext)
 }
 
