@@ -2,6 +2,7 @@ package com.trader.defichain.zmq
 
 import com.trader.defichain.App
 import com.trader.defichain.config.zmqConfig
+import com.trader.defichain.dex.PoolPair
 import com.trader.defichain.dex.cachePoolPairs
 import com.trader.defichain.util.toHex2
 import kotlinx.coroutines.channels.BufferOverflow
@@ -14,6 +15,7 @@ import org.zeromq.ZMsg
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.CoroutineContext
 
+private var poolPairs: Map<Int, PoolPair>? = null
 private val blockChannels = ArrayList<Channel<Boolean>>()
 private val eventChannels = ArrayList<Channel<ZMQEvent>>()
 
@@ -44,11 +46,12 @@ suspend fun receiveFullNodeEvents(zmqContext: ZContext, coroutineContext: Corout
                         val frames = ZMsg.recvMsg(subscriber).toList()
                         when (val topic = frames[0].getString(StandardCharsets.UTF_8)) {
                             ZMQEventType.HASH_BLOCK.code -> {
-                                cachePoolPairs()
-
                                 val blockHash = frames[1].data.toHex2()
+
+                                poolPairs = cachePoolPairs()
+
                                 for (channel in eventChannels) {
-                                    channel.send(ZMQEvent(ZMQEventType.HASH_BLOCK, blockHash))
+                                    channel.send(ZMQEvent(ZMQEventType.HASH_BLOCK, blockHash, poolPairs))
                                 }
                                 for (channel in blockChannels) {
                                     channel.send(true)
@@ -57,7 +60,7 @@ suspend fun receiveFullNodeEvents(zmqContext: ZContext, coroutineContext: Corout
                             ZMQEventType.RAW_TX.code -> {
                                 for (channel in eventChannels) {
                                     val rawTX = frames[1].data.toHex2()
-                                    channel.send(ZMQEvent(ZMQEventType.RAW_TX, rawTX))
+                                    channel.send(ZMQEvent(ZMQEventType.RAW_TX, rawTX, poolPairs))
                                 }
                             }
                             else -> throw IllegalStateException("unsupported topic: $topic")
@@ -79,4 +82,5 @@ enum class ZMQEventType(val code: String) {
 data class ZMQEvent(
     val type: ZMQEventType,
     val payload: String,
+    val poolPairs: Map<Int, PoolPair>?
 )

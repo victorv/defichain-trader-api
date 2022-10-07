@@ -1,6 +1,6 @@
 package com.trader.defichain.indexer
 
-import auctionBid
+import com.trader.defichain.db.auctionBid
 import com.trader.defichain.db.*
 import com.trader.defichain.dex.getPool
 import com.trader.defichain.dex.getPoolID
@@ -61,7 +61,6 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
             val zmqBatch = zmqBatchChannel.receive()
             try {
                 val dbtx = DBTX("ZMQ batch at block height ${zmqBatch.block.height}")
-                dbtx.indexTokens()
                 indexBlock(dbtx, zmqBatch)
                 dbtx.submit()
 
