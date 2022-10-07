@@ -150,7 +150,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
 }
 
 private fun isTradeable(token: Token) = token.destructionHeight == -1 && token.tradeable
-suspend fun cachePoolPairs(): Map<Int, PoolPair>?  {
+suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>>  {
     val allPools = RPC.listPoolPairs()
 
     val signature = allPools.keys.sorted().joinToString(",")
@@ -162,7 +162,7 @@ suspend fun cachePoolPairs(): Map<Int, PoolPair>?  {
 
     val latestPools = filterPools(allPools)
     if (latestPools == poolPairs) {
-        return null
+        return Pair(emptyMap(), emptyMap())
     }
 
     if (isNewSignature) {
@@ -173,8 +173,8 @@ suspend fun cachePoolPairs(): Map<Int, PoolPair>?  {
     poolPairs = latestPools
     poolPairsCached = gzip(poolPairs)
 
-    assignOraclePrices()
-    return poolPairs
+    val oraclePrices = assignOraclePrices()
+    return Pair(poolPairs, oraclePrices)
 }
 
 fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
@@ -183,7 +183,9 @@ fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
     return token.oraclePrice
 }
 
-private suspend fun assignOraclePrices() {
+private suspend fun assignOraclePrices(): Map<Int, Double> {
+    val validOraclePrices = mutableMapOf<Int, Double>()
+
     tokensByID.forEach { it.value.oraclePrice = null }
     val oraclePrices = listPrices().filter { it.ok.content == "true" && it.currency == "USD" }
     for (oraclePrice in oraclePrices) {
@@ -192,11 +194,14 @@ private suspend fun assignOraclePrices() {
         val oraclePrice = oraclePrice.price ?: continue
         if (oraclePrice > 0.0) {
             token.oraclePrice = oraclePrice
+            validOraclePrices[tokenId] = oraclePrice
         }
     }
 
-    val dusdToken = tokensByID[15] ?: return
+    val dusdToken = tokensByID[15] ?: return validOraclePrices
+    validOraclePrices[15] = 1.0
     dusdToken.oraclePrice = 1.0
+    return validOraclePrices
 }
 
 private fun filterPools(allPoolPairs: Map<Int, PoolPair>): Map<Int, PoolPair> {

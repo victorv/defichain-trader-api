@@ -42,9 +42,10 @@ private suspend fun processEvent(event: ZMQEvent) {
             block = newBlock
 
             val poolPairs = event.poolPairs
-            if(poolPairs != null) {
+            val oraclePrices = event.oraclePrices
+            if(poolPairs != null && oraclePrices != null) {
                 val dbtx = DBTX("Tokens, pool pairs and oracle prices at block height ${newBlock.height}")
-                dbtx.insertPoolPairs(newBlock, poolPairs)
+                dbtx.insertPoolPairs(newBlock, poolPairs, oraclePrices)
                 dbtx.submit()
             }
 

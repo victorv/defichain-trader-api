@@ -15,7 +15,6 @@ import org.zeromq.ZMsg
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.CoroutineContext
 
-private var poolPairs: Map<Int, PoolPair>? = null
 private val blockChannels = ArrayList<Channel<Boolean>>()
 private val eventChannels = ArrayList<Channel<ZMQEvent>>()
 
@@ -48,10 +47,10 @@ suspend fun receiveFullNodeEvents(zmqContext: ZContext, coroutineContext: Corout
                             ZMQEventType.HASH_BLOCK.code -> {
                                 val blockHash = frames[1].data.toHex2()
 
-                                poolPairs = cachePoolPairs()
+                                val (poolPairs, oraclePrices) = cachePoolPairs()
 
                                 for (channel in eventChannels) {
-                                    channel.send(ZMQEvent(ZMQEventType.HASH_BLOCK, blockHash, poolPairs))
+                                    channel.send(ZMQEvent(ZMQEventType.HASH_BLOCK, blockHash, poolPairs, oraclePrices))
                                 }
                                 for (channel in blockChannels) {
                                     channel.send(true)
@@ -60,7 +59,7 @@ suspend fun receiveFullNodeEvents(zmqContext: ZContext, coroutineContext: Corout
                             ZMQEventType.RAW_TX.code -> {
                                 for (channel in eventChannels) {
                                     val rawTX = frames[1].data.toHex2()
-                                    channel.send(ZMQEvent(ZMQEventType.RAW_TX, rawTX, poolPairs))
+                                    channel.send(ZMQEvent(ZMQEventType.RAW_TX, rawTX, null, null))
                                 }
                             }
                             else -> throw IllegalStateException("unsupported topic: $topic")
@@ -82,5 +81,6 @@ enum class ZMQEventType(val code: String) {
 data class ZMQEvent(
     val type: ZMQEventType,
     val payload: String,
-    val poolPairs: Map<Int, PoolPair>?
+    val poolPairs: Map<Int, PoolPair>?,
+    val oraclePrices: Map<Int, Double>?
 )

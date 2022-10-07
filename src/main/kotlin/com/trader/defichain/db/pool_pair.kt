@@ -18,8 +18,15 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(token, block_height) DO NOTHING
 """.trimIndent()
 
+private val template_insertOraclePrice = """
+INSERT INTO oracle_price (price, token, block_height) 
+VALUES (?, ?, ?)
+ON CONFLICT(token, block_height) DO NOTHING
+""".trimIndent()
+
 private val oldPoolPairs = mutableMapOf<Int, PoolPair>()
 private val oldFees = mutableMapOf<Int, Fee>()
+private val oldOraclePrices = mutableMapOf<Int, Double>()
 
 fun updatePoolPair(poolID: Int, poolPair: PoolPair): Boolean {
     val oldPoolPair = oldPoolPairs[poolID]
@@ -42,7 +49,14 @@ fun updateFee(poolID: Int, poolPair: PoolPair): Boolean {
     return true
 }
 
-fun DBTX.insertPoolPairs(block: Block, poolPairs: Map<Int, PoolPair>) {
+fun updateOraclePrice(tokenID: Int, oraclePrice: Double): Boolean {
+    val oldOraclePrice = oldOraclePrices[tokenID]
+    if (oldOraclePrice == oraclePrice) return false
+    oldOraclePrices[tokenID] = oraclePrice
+    return true
+}
+
+fun DBTX.insertPoolPairs(block: Block, poolPairs: Map<Int, PoolPair>, oraclePrices: Map<Int, Double>) {
     insertBlock(block)
 
     doLater {
@@ -73,6 +87,18 @@ fun DBTX.insertPoolPairs(block: Block, poolPairs: Map<Int, PoolPair>) {
                     it.setObject(5, poolPair.commission)
                     it.setInt(6, poolID)
                     it.setInt(7, block.height)
+                    it.addBatch()
+                }
+            }
+            it.executeBatch()
+        }
+
+        connection.prepareStatement(template_insertOraclePrice).use {
+            for ((tokenID, price) in oraclePrices) {
+                if (updateOraclePrice(tokenID, price)) {
+                    it.setDouble(1, price)
+                    it.setInt(2, tokenID)
+                    it.setInt(3, block.height)
                     it.addBatch()
                 }
             }
