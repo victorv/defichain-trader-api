@@ -371,7 +371,7 @@ object DB {
     private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
         val blockHeight = resultSet.getObject(2)
         val blockEntry = if (blockHeight == null) null else BlockEntry(
-            blockHeight = blockHeight as Long,
+            blockHeight = blockHeight as Int,
             txn = resultSet.getInt(3),
         )
 
@@ -410,7 +410,7 @@ object DB {
 
     @kotlinx.serialization.Serializable
     data class BlockEntry(
-        val blockHeight: Long,
+        val blockHeight: Int,
         val txn: Int,
     )
 
