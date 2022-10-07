@@ -46,6 +46,8 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
                         dbtx.submit()
 
                         logger.info("Indexed missing block at block height ${block.height}")
+                    } else {
+                        break
                     }
                 } catch (e: Throwable) {
                     logger.error(
