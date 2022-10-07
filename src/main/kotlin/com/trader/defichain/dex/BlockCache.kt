@@ -222,8 +222,7 @@ private fun filterPools(allPoolPairs: Map<Int, PoolPair>): Map<Int, PoolPair> {
             check(tokenB.symbol == tokenBSymbol)
             return@filter false
         }
-
-        tokenASymbol != "BURN" && tokenBSymbol != "BURN"
+        true
     }
     return latestPoolPairs
 }
