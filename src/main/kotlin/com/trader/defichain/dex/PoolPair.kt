@@ -31,15 +31,13 @@ data class PoolPair(
     val idTokenA: Int,
     @kotlinx.serialization.Serializable(with = TokenIDSerializer::class)
     val idTokenB: Int,
-    val dexFeePctTokenA: Double? = null,
     val dexFeeInPctTokenA: Double? = null,
     val dexFeeOutPctTokenA: Double? = null,
-    val dexFeePctTokenB: Double? = null,
     val dexFeeOutPctTokenB: Double? = null,
     val dexFeeInPctTokenB: Double? = null,
+    val commission: Double? = null,
     val reserveA: Double,
     val reserveB: Double,
-    val commission: Double? = null,
     val tradeEnabled: Boolean,
 ) {
     @Contextual
