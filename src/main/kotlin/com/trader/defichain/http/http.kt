@@ -1,13 +1,19 @@
 package com.trader.defichain.http
 
+import com.trader.defichain.dex.PoolSwap
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
-import kotlinx.serialization.decodeFromString
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.GZIPOutputStream
 
 const val poolswapLimit = 10
@@ -35,4 +41,35 @@ inline fun <reified T> gzip(data: T): ByteArray {
         it.flush()
     }
     return buffer.toByteArray()
+}
+
+@kotlinx.serialization.Serializable
+data class Message(
+    val id: String,
+    val data: JsonElement,
+) {
+    fun asPoolSwap() = Json.decodeFromJsonElement<PoolSwap>(data)
+    fun asUUID() = Json.decodeFromJsonElement<String>(data)
+}
+
+class Connection {
+
+    private var uuid: String? = null
+    private val writableChannel = Channel<String>(10, BufferOverflow.DROP_OLDEST)
+    val poolSwaps = CopyOnWriteArrayList<PoolSwap>()
+    val channel = writableChannel as ReceiveChannel<String>
+
+    suspend fun send(message: String) {
+        if (uuid != null) {
+            writableChannel.send(message)
+        }
+    }
+
+    fun close() {
+        writableChannel.close()
+    }
+
+    fun setUUID(uuid: String) {
+        this.uuid = uuid
+    }
 }

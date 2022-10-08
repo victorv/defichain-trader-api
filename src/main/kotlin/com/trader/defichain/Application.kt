@@ -6,14 +6,10 @@ import com.trader.defichain.config.rpcConfig
 import com.trader.defichain.config.zmqConfig
 import com.trader.defichain.dex.broadcastDEX
 import com.trader.defichain.dex.cachePoolPairs
-import com.trader.defichain.dex.pingDEXSubscribers
 import com.trader.defichain.mempool.sendMempoolEvents
 import com.trader.defichain.plugins.configureContentNegotiation
 import com.trader.defichain.plugins.configureRouting
 import com.trader.defichain.plugins.configureWebsockets
-import com.trader.defichain.telegram.approveNewAccounts
-import com.trader.defichain.telegram.loadAccounts
-import com.trader.defichain.telegram.manageAccounts
 import com.trader.defichain.zmq.receiveFullNodeEvents
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -31,34 +27,16 @@ lateinit var applicationEngine: ApplicationEngine
 lateinit var appServerConfig: AppServerConfig
 
 fun loadAppServerConfig(path: String) {
-    appServerConfig = Json.decodeFromStream(Files.newInputStream(Paths.get(path)))
+    appServerConfig = Json { ignoreUnknownKeys = true }.decodeFromStream(Files.newInputStream(Paths.get(path)))
 
     zmqConfig = appServerConfig.zmq
     rpcConfig = appServerConfig.rpc
 }
+
 fun main(vararg args: String) {
     loadAppServerConfig(args[0])
     runBlocking {
         cachePoolPairs()
-    }
-
-    if (appServerConfig.production) {
-        if(!appServerConfig.local) {
-            println("Launching Telegram account authenticator")
-            GlobalScope.launch {
-                approveNewAccounts(coroutineContext)
-            }
-        }
-        println("Loading accounts")
-        loadAccounts()
-    }
-
-    GlobalScope.launch {
-        manageAccounts(coroutineContext)
-    }
-
-    GlobalScope.launch(Dispatchers.IO) {
-        pingDEXSubscribers(coroutineContext)
     }
 
     GlobalScope.launch(Dispatchers.IO) {
@@ -83,23 +61,10 @@ fun main(vararg args: String) {
 }
 
 @kotlinx.serialization.Serializable
-data class TelegramBotConfig(
-    val url: String,
-    val secret: String,
-) {
-    fun createURL(uri: String): String {
-        check(!uri.startsWith("/"))
-        return "$url/$secret/$uri"
-    }
-}
-
-@kotlinx.serialization.Serializable
 data class AppServerConfig(
     val production: Boolean,
     val local: Boolean = true,
-    val telegramBot: TelegramBotConfig,
     val webappRoot: String,
-    var accountsRoot: String,
     val host: String,
     val port: Int,
     val rpc: RPCConfig,
@@ -115,9 +80,6 @@ data class AppServerConfig(
 
             val indexHTML = webappRootPath.resolve("index.html")
             check(Files.exists(indexHTML) && Files.isRegularFile(indexHTML))
-
-            val accountRootPath = Paths.get(accountsRoot)
-            check(Files.exists(accountRootPath) && Files.isDirectory(accountRootPath))
         }
     }
 }

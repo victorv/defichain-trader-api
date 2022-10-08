@@ -4,6 +4,8 @@ import com.trader.defichain.db.DB
 import com.trader.defichain.dex.PoolSwap
 import com.trader.defichain.dex.getTokenSymbol
 import com.trader.defichain.dex.testPoolSwap
+import com.trader.defichain.http.Connection
+import com.trader.defichain.http.Message
 import com.trader.defichain.indexer.calculateFee
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.rpc.RPC
@@ -12,12 +14,11 @@ import com.trader.defichain.rpc.TX
 import com.trader.defichain.util.floorPlain
 import com.trader.defichain.zmq.ZMQEventType
 import com.trader.defichain.zmq.newZMQEventChannel
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import java.math.BigDecimal
 import java.util.*
 import kotlin.coroutines.CoroutineContext
@@ -41,7 +42,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 
             connections.forEach {
                 try {
-                    it.channel.send("""{"height":${block.height}}""")
+                    it.send("""{"height":${block.height}}""")
                 } catch (e: Throwable) {
                     it.close()
                 }
@@ -90,11 +91,14 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                     ),
                 )
 
-                val json = Json.encodeToString(row)
+                val json = Json.encodeToString(Message(
+                    id = "mempool-swap",
+                    data = Json.encodeToJsonElement(row),
+                ))
 
                 connections.forEach {
                     try {
-                        it.channel.send(json)
+                        it.send(json)
                     } catch (e: Throwable) {
                         it.close()
                     }
@@ -109,11 +113,3 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
     }
 }
 
-class Connection {
-
-    val channel = Channel<String>(10, BufferOverflow.DROP_OLDEST)
-
-    fun close() {
-        channel.close()
-    }
-}
