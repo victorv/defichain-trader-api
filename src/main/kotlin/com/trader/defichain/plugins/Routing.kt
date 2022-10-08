@@ -61,7 +61,6 @@ fun Application.configureRouting() {
                             }
                             "remove-swap" -> {
                                 val swap = message.asPoolSwap()
-                                println("removing swap")
                                 val pendingRemoval = connection.poolSwaps.filter {
                                     it.tokenFrom == swap.tokenFrom &&
                                             it.tokenTo == swap.tokenTo &&
