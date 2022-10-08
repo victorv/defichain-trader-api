@@ -37,7 +37,6 @@ where block_height >= (select max(block_height) from minted_tx) - 120
 group by token.dc_token_symbol;
 """.trimIndent()
 
-// TODO for optimal performance some filters should be applied to the join directly and not be part of the where clause
 @Language("sql")
 private val template_selectPoolSwaps = """
 with minted_swap as (
