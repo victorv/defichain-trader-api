@@ -58,7 +58,7 @@ commission
 from pool_pair
 inner join fee on fee.token = pool_pair.token
 AND fee.block_height = (select max(fee.block_height) from fee where fee.block_height <= pool_pair.block_height)
-where pool_pair.block_height <= (select max(block.height) - 2880 from block) AND pool_pair.token = ANY(?)
+where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(?)
 order by pool_pair.block_height DESC     
 """.trimIndent()
 
