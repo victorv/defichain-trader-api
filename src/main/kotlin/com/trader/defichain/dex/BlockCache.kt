@@ -39,7 +39,7 @@ fun getPoolID(tokenA: Int, tokenB: Int): Int {
         .key
 }
 
-fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
+fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>): DexResult {
     var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()
     val swapResults = ArrayList<SwapResult>()
 
@@ -70,7 +70,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>): DexResult {
             var amountFrom = BigDecimal(poolSwap.amountFrom)
             for (poolId in path) {
                 if (!poolsForSwap.containsKey(poolId)) {
-                    val pool = getPool(poolId)
+                    val pool = poolPairs.getValue(poolId)
                     poolsForSwap[poolId] = pool.copy(
                         reserveA = pool.reserveA,
                         reserveB = pool.reserveB,

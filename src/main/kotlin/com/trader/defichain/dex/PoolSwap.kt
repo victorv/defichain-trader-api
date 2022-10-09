@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
 fun testPoolSwap(poolSwap: AbstractPoolSwap): SwapResult {
-    return executeSwaps(listOf(poolSwap)).swapResults.first()
+    return executeSwaps(listOf(poolSwap), getPools()).swapResults.first()
 }
 
 interface AbstractPoolSwap {
