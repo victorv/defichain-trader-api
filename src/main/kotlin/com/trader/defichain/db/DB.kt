@@ -436,7 +436,7 @@ object DB {
             }
 
             val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
-            if (abs(estimate - previousEstimate) < estimate * 0.001) continue
+            if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
             previousEstimate = estimate
 
             metrics.add(listOf(height.toDouble(), estimate))
