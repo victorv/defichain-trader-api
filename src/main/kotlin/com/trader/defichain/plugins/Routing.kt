@@ -2,10 +2,7 @@ package com.trader.defichain.plugins
 
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.DB
-import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.getCachedPoolPairs
-import com.trader.defichain.dex.getCachedTokens
-import com.trader.defichain.dex.testPoolSwap
+import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
 import com.trader.defichain.mempool.connections
 import io.ktor.http.*
@@ -15,14 +12,12 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
-import io.ktor.util.pipeline.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import java.io.File
 
@@ -92,6 +87,11 @@ fun Application.configureRouting() {
         get("/status") {
             call.respond(HttpStatusCode.OK, "ok")
         }
+        get("/graph") {
+            val poolSwap = extractPoolSwap(call) ?: return@get
+            val metrics = DB.getMetrics(poolSwap)
+            call.respond(metrics)
+        }
         get("/poolpairs") {
             val response = getCachedPoolPairs()
             call.response.header(HttpHeaders.ContentEncoding, "gzip")
@@ -119,24 +119,30 @@ fun Application.configureRouting() {
             call.respondBytes(ContentType.Application.Json) { response }
         }
         get("/estimate") {
-            val poolSwapParam = call.request.queryParameters["poolswap"]
-            if (poolSwapParam == null) {
-                call.respond(errorPoolswapsMissing)
-                return@get
-            }
-
-            val poolSwap = parsePoolSwap(
-                if (poolSwapParam.contains("desiredResult")) poolSwapParam
-                else "$poolSwapParam desiredResult 1.0"
-            )
-            poolSwap.checkDesiredResult()
+            val poolSwap = extractPoolSwap(call) ?: return@get
             val testResult = testPoolSwap(poolSwap)
             call.respond(testResult)
         }
     }
 }
 
+private suspend fun extractPoolSwap(call: ApplicationCall): PoolSwap? {
+    val poolSwapParam = call.request.queryParameters["poolswap"]
+    if (poolSwapParam == null) {
+        call.respond(errorPoolswapsMissing)
+        return null
+    }
+
+    val poolSwap = parsePoolSwap(
+        if (poolSwapParam.contains("desiredResult")) poolSwapParam
+        else "$poolSwapParam desiredResult 1.0"
+    )
+    poolSwap.checkDesiredResult()
+    return poolSwap
+}
+
 private fun parsePoolSwap(requestedPoolSwap: String): PoolSwap {
+    println(requestedPoolSwap)
     val (swap, desiredResult) = requestedPoolSwap.split(" desiredResult ")
     val fromAndTo = swap.split(" to ")
     val from = fromAndTo[0].split(" ")
