@@ -1,5 +1,6 @@
 package com.trader.defichain.test
 
+import com.trader.defichain.dex.AbstractPoolSwap
 import com.trader.defichain.dex.PoolPair
 import com.trader.defichain.dex.PoolSwapTestResponse
 import com.trader.defichain.loadAppServerConfig
@@ -153,11 +154,12 @@ data class CapturedBlock(
 
 @Serializable
 data class PoolSwapTest(
-    val amountFrom: Double,
-    val tokenFrom: String,
-    val tokenTo: String,
+    override val amountFrom: Double,
+    override val tokenFrom: String,
+    override val tokenTo: String,
+    override val desiredResult: Double? = null,
     val from: String,
     val to: String,
     var estimate: Double = 0.0,
-    var response: PoolSwapTestResponse? = null
-)
+    var response: PoolSwapTestResponse? = null,
+) : AbstractPoolSwap

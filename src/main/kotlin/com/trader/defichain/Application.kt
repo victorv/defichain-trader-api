@@ -47,8 +47,10 @@ fun main(vararg args: String) {
         receiveFullNodeEvents(ZContext(), coroutineContext)
     }
 
-    GlobalScope.launch(Dispatchers.IO) {
-        sendMempoolEvents(coroutineContext)
+    if (appServerConfig.production) {
+        GlobalScope.launch(Dispatchers.IO) {
+            sendMempoolEvents(coroutineContext)
+        }
     }
 
     applicationEngine = embeddedServer(Netty, port = appServerConfig.port, host = appServerConfig.host) {

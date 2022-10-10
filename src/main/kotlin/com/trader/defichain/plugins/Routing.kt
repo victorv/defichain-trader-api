@@ -79,7 +79,6 @@ fun Application.configureRouting() {
             } catch (e: Exception) {
                 println(e.localizedMessage)
             } finally {
-                println("Removing $connection!")
                 connections -= connection
             }
         }
@@ -142,7 +141,6 @@ private suspend fun extractPoolSwap(call: ApplicationCall): PoolSwap? {
 }
 
 private fun parsePoolSwap(requestedPoolSwap: String): PoolSwap {
-    println(requestedPoolSwap)
     val (swap, desiredResult) = requestedPoolSwap.split(" desiredResult ")
     val fromAndTo = swap.split(" to ")
     val from = fromAndTo[0].split(" ")
