@@ -42,7 +42,11 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 
             connections.forEach {
                 try {
-                    it.send("""{"height":${block.height}}""")
+                    val message = Message(
+                        id = "block",
+                        data = JsonPrimitive(block.height)
+                    )
+                    it.send(Json.encodeToString(message))
                 } catch (e: Throwable) {
                     it.close()
                 }
