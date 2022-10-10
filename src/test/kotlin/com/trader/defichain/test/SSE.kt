@@ -1,18 +1,25 @@
 package com.trader.defichain.test
 
+import com.trader.defichain.dex.AbstractPoolSwap
+import com.trader.defichain.dex.PoolSwap
+import com.trader.defichain.http.Message
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.http.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.nio.charset.StandardCharsets
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeoutException
 
 private const val joinTimeout = 10000
 private const val pingEvent = "event: ping"
-private val allSSEJobs = CopyOnWriteArrayList<SSEClient>()
+private val allSSEJobs = CopyOnWriteArrayList<WebsocketClient>()
 
 fun joinSSEJobs() {
     val startTime = System.currentTimeMillis()
@@ -24,26 +31,90 @@ fun joinSSEJobs() {
     }
 }
 
-class SSEClientEngine {
+class WebsocketClient(private val client: HttpClient) {
 
-    private val sseJobs = CopyOnWriteArrayList<SSEClient>()
-
-    fun cancelSSEJobs() {
-        sseJobs.forEach { it.setDisconnected() }
+    private val messages = CopyOnWriteArrayList<Message>()
+    fun addMessage(data: ByteArray) {
+        messages.add(Json.decodeFromString(data.decodeToString()))
     }
 
-    fun receiveServerSentEvents(path: String): SSEClient {
-        val reader = connectTo(path)
-        val client = SSEClient()
+    fun receive(): Message {
+        var i = 0
+        while (messages.isEmpty() && i < 60) {
+            Thread.sleep(50)
+            i++
+        }
+        return messages.removeFirst()
+    }
 
+    fun close() {
+        client.close()
+    }
+}
+
+class SSEClientEngine {
+
+    private val clients = CopyOnWriteArrayList<WebsocketClient>()
+
+    fun closeClients() {
+        clients.forEach { it.close() }
+    }
+
+    fun receiveMessages(swaps: List<AbstractPoolSwap>): WebsocketClient {
+        val websocketClient = HttpClient(CIO) {
+            install(WebSockets)
+        }
+
+
+//        val reader = connectTo(path)
+
+        var client = WebsocketClient(websocketClient)
         Thread {
-            try {
-                sseJobs.add(client)
-                allSSEJobs.add(client)
 
-                fetchEvents(reader, client)
+            try {
+                runBlocking {
+                    websocketClient.webSocket(HttpMethod.Get, serverURL, serverPort, "/stream") {
+                        clients.add(client)
+                        allSSEJobs.add(client)
+
+                        send(
+                            Json.encodeToString(
+                                Message(
+                                    id = "uuid",
+                                    data = JsonPrimitive(UUID.randomUUID().toString()),
+                                )
+                            )
+                        )
+
+                        for (swap in swaps) {
+                            val message = Message(
+                                id = "add-swap",
+                                data = Json.encodeToJsonElement(
+                                    PoolSwap(
+                                        amountFrom = swap.amountFrom,
+                                        tokenFrom = swap.tokenFrom,
+                                        tokenTo = swap.tokenTo,
+                                        desiredResult = 1.0,
+                                    )
+                                )
+                            )
+                            send(Json.encodeToString(message).toByteArray())
+                        }
+
+                        var responsesReceived = 0
+                        for (message in incoming) {
+                            responsesReceived++
+                            if (responsesReceived == swaps.size) {
+                                publishZMQMessage()
+                                publishZMQMessage()
+                            }
+
+                            client?.addMessage(message.data)
+                        }
+                    }
+                }
             } finally {
-                client.setDisconnected()
+                client?.close()
                 allSSEJobs.remove(client)
             }
         }.start()
@@ -51,132 +122,3 @@ class SSEClientEngine {
         return client
     }
 }
-
-private fun fetchEvents(reader: InputStream, client: SSEClient) {
-    reader.bufferedReader(StandardCharsets.UTF_8).use { reader ->
-        do {
-            val line = reader.readLine() ?: break
-            client.addLine(line)
-        } while (!client.isDisconnected())
-    }
-}
-
-private fun connectTo(path: String): InputStream {
-    val url = URL("${serverURL}/$path")
-    val connection = url.openConnection() as HttpURLConnection
-    connection.setRequestProperty("accept", "application/json")
-
-    if (connection.responseCode == HttpURLConnection.HTTP_BAD_REQUEST) {
-        throw IllegalStateException(connection.errorStream.readAllBytes().decodeToString())
-    }
-    return connection.inputStream
-}
-
-
-class SSEClient {
-
-    private companion object {
-        const val readTimeout = 5000
-        const val linesPerEvent = 3
-        const val retryPrefix = "retry: "
-        const val eventNamePrefix = "event: "
-        const val eventDataPrefix = "data: "
-        val eventNameMatcher = Regex("^[a-z]+$")
-    }
-
-    private var disconnected = false
-    private var eventsRead = 0
-    private val lines = LinkedList<String>()
-    private var prevLine: String? = null
-
-    fun addLine(line: String) {
-        if (line != pingEvent && prevLine != pingEvent) {
-            lines.add(line)
-        }
-        prevLine = line
-    }
-
-    fun isDisconnected() = disconnected
-
-    fun setDisconnected() {
-        disconnected = true
-    }
-
-    fun hasLines() = lines.isNotEmpty()
-
-    fun getLines(): List<String> = lines
-
-    inline fun <reified T> nextEvent(): SSE<T> {
-        val sse = getNextEvent()
-        return SSE(
-            name = sse.name,
-            data = Json.decodeFromString(sse.data),
-            retry = sse.retry
-        )
-    }
-
-    fun getNextEvent(): SSE<String> {
-        check(!disconnected) { "You are no longer connected to the server" }
-
-        val requiredLines = if (eventsRead == 0) linesPerEvent + 1 else linesPerEvent
-
-        val startTime = System.currentTimeMillis()
-        while (lines.size < requiredLines) {
-            Thread.sleep(50)
-            val timePassed = System.currentTimeMillis() - startTime
-            if (lines.size < requiredLines && timePassed > readTimeout) {
-                throw TimeoutException("Queue does not contain any events. Gave up after waiting ${readTimeout}ms.")
-            }
-        }
-
-        var retry: Int? = null
-        if (eventsRead == 0) {
-            val retryLine = lines.poll()
-            check(retryLine.length > retryPrefix.length) {
-                "Line is too short to contain retry: `$retryLine`"
-            }
-            check(retryLine.startsWith(retryPrefix)) {
-                "Expected line to start with `$retryPrefix`, got: `$retryLine`"
-            }
-
-            retry = retryLine.removePrefix(retryPrefix).toInt()
-            check(retry == 30000)
-        }
-
-        val eventNameLine = lines.poll()
-        check(eventNameLine.length > eventNamePrefix.length) {
-            "Line is too short to contain an event name: `$eventNameLine`"
-        }
-        check(eventNameLine.startsWith(eventNamePrefix)) {
-            "Expected line to start with `$eventNamePrefix`, got: `$eventNameLine`"
-        }
-
-        val eventName = eventNameLine.removePrefix(eventNamePrefix)
-        check(eventNameMatcher.matches(eventName)) {
-            "Expected event name to match `${eventNameMatcher.pattern}`, got: `$eventName`"
-        }
-
-        val eventDataLine = lines.poll()
-        check(eventDataLine.length > eventDataPrefix.length) {
-            "Line for event `$eventName` is too short to contain event data: `$eventDataLine`"
-        }
-        check(eventDataLine.startsWith(eventDataPrefix)) {
-            "Expected line for event `$eventName` to start with `$eventDataPrefix`, got: `$eventDataLine`"
-        }
-
-        val end = lines.poll()
-        check(end.isEmpty()) { "Event `$eventName` should be proceeded by a \\n character" }
-
-        val eventData = eventDataLine.removePrefix(eventDataPrefix)
-
-        eventsRead++
-
-        return SSE(
-            name = eventName,
-            data = eventData,
-            retry = retry
-        )
-    }
-}
-
-data class SSE<T>(val name: String, val data: T, val retry: Int?)

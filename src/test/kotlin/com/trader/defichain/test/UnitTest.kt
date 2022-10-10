@@ -1,6 +1,7 @@
 package com.trader.defichain.test
 
 import com.trader.defichain.applicationEngine
+import com.trader.defichain.dex.AbstractPoolSwap
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
@@ -10,7 +11,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.io.path.absolutePathString
 
-const val serverURL = "http://127.0.0.1:5555"
+const val serverURL = "127.0.0.1"
+const val serverPort = 5555
 
 abstract class UnitTest {
 
@@ -24,11 +26,11 @@ abstract class UnitTest {
 
     @AfterEach
     fun afterTest() {
-        sseClientEngine.cancelSSEJobs()
+        sseClientEngine.closeClients()
     }
 
-    fun receiveServerSentEvents(path: String): SSEClient {
-        return sseClientEngine.receiveServerSentEvents(path)
+    fun receiveMessages(swaps: List<AbstractPoolSwap>): WebsocketClient {
+        return sseClientEngine.receiveMessages(swaps)
     }
 
     companion object {
@@ -49,7 +51,7 @@ abstract class UnitTest {
             appThread.start()
 
             val startTime = System.currentTimeMillis()
-            val statusCheck = URL("${serverURL}/status")
+            val statusCheck = URL("http://${serverURL}/status")
             var responseCode = 0
             do {
                 try {
@@ -64,7 +66,8 @@ abstract class UnitTest {
         @AfterAll
         @JvmStatic
         fun stopApp() {
-            joinSSEJobs()
+            // TODO stop gracefully in the future
+//            joinSSEJobs()
 
             val publisherThread = stopZMQPublisher()
             applicationEngine.stop(0, 5000)

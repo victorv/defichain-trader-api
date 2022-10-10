@@ -1,39 +1,15 @@
 package com.trader.defichain.dex
 
+import com.trader.defichain.http.Message
+import com.trader.defichain.mempool.connections
 import com.trader.defichain.zmq.newZQMBlockChannel
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlin.coroutines.CoroutineContext
 
-private val blockHashChannel: ReceiveChannel<Boolean> = newZQMBlockChannel()
-private val subscribers = CopyOnWriteArrayList<DEXSubscriber>()
-
-fun addSubscriber(subscriber: DEXSubscriber) {
-    subscribers.add(subscriber)
-    subscriber.isActive = true
-}
-
-fun removeSubscriber(subscriber: DEXSubscriber) {
-    subscribers.remove(subscriber)
-    subscriber.isActive = false
-}
-
-suspend fun pingDEXSubscribers(coroutineContext: CoroutineContext) {
-    while (coroutineContext.isActive) {
-        for (subscriber in subscribers) {
-            try {
-                subscriber.pendingMessages.send("event: ping\n\n")
-            } catch (e: Throwable) {
-                removeSubscriber(subscriber)
-            }
-        }
-        delay(10000)
-    }
-}
+val blockChannel = newZQMBlockChannel()
 
 suspend fun broadcastDEX(coroutineContext: CoroutineContext) {
     while (coroutineContext.isActive) {
@@ -46,21 +22,22 @@ suspend fun broadcastDEX(coroutineContext: CoroutineContext) {
 }
 
 private suspend fun broadcast() {
-    blockHashChannel.receive()
+    blockChannel.receive()
 
-    for (subscriber in subscribers) {
-        val swapResults = ArrayList<SwapResult?>()
+    for (connection in connections) {
+
         try {
-            for (poolSwap in subscriber.poolSwaps) {
-                val testResult = testPoolSwap(poolSwap)
-                swapResults.add(testResult)
-            }
+            for (poolSwap in connection.poolSwaps) {
+                val swapResult = testPoolSwap(poolSwap)
 
-            val data = Json.encodeToString(swapResults)
-            subscriber.pendingMessages.send("event: poolswap\ndata: $data\n\n")
+                val message = Message(
+                    id = "swap-result",
+                    data = Json.encodeToJsonElement(swapResult),
+                )
+                connection.send(Json.encodeToString(message))
+            }
         } catch (e: Throwable) {
-            removeSubscriber(subscriber)
-            subscriber.pendingMessages.close(e)
+            connection.close()
         }
     }
 }

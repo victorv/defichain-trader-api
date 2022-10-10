@@ -1,15 +1,21 @@
 package com.trader.defichain.db
 
-import com.trader.defichain.dex.getOraclePriceForSymbol
+import com.trader.defichain.dex.*
 import com.trader.defichain.util.floorPlain
 import kotlinx.serialization.json.*
 import org.intellij.lang.annotations.Language
 import org.postgresql.ds.PGSimpleDataSource
+import java.lang.Integer.max
 import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.Types
+import java.util.*
+import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
+import kotlin.math.abs
+import kotlin.math.min
 
 private val template_tokensSoldRecently = """
 select 
@@ -37,7 +43,25 @@ where block_height >= (select max(block_height) from minted_tx) - 120
 group by token.dc_token_symbol;
 """.trimIndent()
 
-// TODO for optimal performance some filters should be applied to the join directly and not be part of the where clause
+@Language("sql")
+private val template_poolPairs = """
+select 
+reserve_a, 
+reserve_b, 
+pool_pair.token, 
+pool_pair.block_height,
+in_a,
+out_a,
+in_b,
+out_b,
+commission
+from pool_pair
+inner join fee on fee.token = pool_pair.token
+AND fee.block_height = (select max(fee.block_height) from fee where fee.block_height <= pool_pair.block_height)
+where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(?)
+order by pool_pair.block_height DESC     
+""".trimIndent()
+
 @Language("sql")
 private val template_selectPoolSwaps = """
 with minted_swap as (
@@ -334,6 +358,93 @@ object DB {
         }
     }
 
+    fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
+        val poolPairUpdates = mutableMapOf<Int, MutableMap<Int, PoolPair>>()
+        val uniquePoolIdentifiers = getSwapPaths(poolSwap).flatten().toSet().toTypedArray()
+        println(uniquePoolIdentifiers.contentToString())
+
+        var minBlockHeight = Integer.MAX_VALUE
+        var maxBlockHeight = Integer.MIN_VALUE
+        connectionPool.connection.use { connection ->
+            val poolIDArray = connection.createArrayOf("INT", uniquePoolIdentifiers)
+
+            connection.prepareStatement(template_poolPairs).use { statement ->
+                statement.setArray(1, poolIDArray)
+                statement.executeQuery().use { resultSet ->
+                    while (resultSet.next()) {
+                        val poolID = resultSet.getInt(3)
+
+                        val blockHeight = resultSet.getInt(4)
+                        minBlockHeight = min(blockHeight, minBlockHeight)
+                        maxBlockHeight = max(blockHeight, maxBlockHeight)
+
+                        val poolPair = getPool(poolID)
+                        val row = PoolPair(
+                            symbol = poolPair.symbol,
+                            idTokenA = poolPair.idTokenA,
+                            idTokenB = poolPair.idTokenB,
+                            status = poolPair.status,
+                            tradeEnabled = poolPair.tradeEnabled,
+                            reserveA = resultSet.getDouble(1),
+                            reserveB = resultSet.getDouble(2),
+                            dexFeeInPctTokenA = resultSet.getDouble(5),
+                            dexFeeOutPctTokenA = resultSet.getDouble(6),
+                            dexFeeInPctTokenB = resultSet.getDouble(7),
+                            dexFeeOutPctTokenB = resultSet.getDouble(8),
+                            commission = resultSet.getDouble(9)
+                        )
+
+                        var poolPairsAtHeight = poolPairUpdates[blockHeight]
+                        if (poolPairsAtHeight == null) {
+                            poolPairsAtHeight = mutableMapOf()
+                            poolPairUpdates[blockHeight] = poolPairsAtHeight
+                        }
+                        poolPairsAtHeight[poolID] = row
+                    }
+                }
+            }
+        }
+        println("$minBlockHeight $maxBlockHeight")
+
+        val poolPairs = mutableMapOf<Int, PoolPair>()
+        while (minBlockHeight <= maxBlockHeight) {
+            val poolPairsAtHeight = poolPairUpdates[minBlockHeight]
+
+            if (poolPairsAtHeight == null) {
+                minBlockHeight++
+                continue
+            }
+
+            for ((poolID, poolPair) in poolPairsAtHeight) {
+                poolPairs[poolID] = poolPair
+            }
+
+            if (poolPairs.size == uniquePoolIdentifiers.size) {
+                break
+            }
+            minBlockHeight++
+        }
+
+        println(poolPairs.size)
+
+        val metrics = ArrayList<List<Double>>()
+        var previousEstimate = 0.0
+        for (height in minBlockHeight..maxBlockHeight) {
+            val poolPairsAtHeight = poolPairUpdates[height] ?: continue
+            for ((poolID, poolPair) in poolPairsAtHeight) {
+                poolPairs[poolID] = poolPair
+            }
+
+            val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
+            if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
+            previousEstimate = estimate
+
+            metrics.add(listOf(height.toDouble(), estimate))
+        }
+
+        return metrics
+    }
+
     fun tokensSoldRecently() = calcTokenAggregate(template_tokensSoldRecently)
     fun tokensBoughtRecently() = calcTokenAggregate(template_tokensBoughtRecently)
     private fun calcTokenAggregate(sql: String): List<TokenAggregate> {
@@ -371,7 +482,7 @@ object DB {
     private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
         val blockHeight = resultSet.getObject(2)
         val blockEntry = if (blockHeight == null) null else BlockEntry(
-            blockHeight = blockHeight as Long,
+            blockHeight = blockHeight as Int,
             txn = resultSet.getInt(3),
         )
 
@@ -410,7 +521,7 @@ object DB {
 
     @kotlinx.serialization.Serializable
     data class BlockEntry(
-        val blockHeight: Long,
+        val blockHeight: Int,
         val txn: Int,
     )
 
