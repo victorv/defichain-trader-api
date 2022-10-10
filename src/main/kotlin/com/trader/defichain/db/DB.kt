@@ -57,7 +57,9 @@ out_b,
 commission
 from pool_pair
 inner join fee on fee.token = pool_pair.token
-AND fee.block_height = (select max(fee.block_height) from fee where fee.block_height <= pool_pair.block_height)
+ AND fee.block_height = 
+ (select coalesce(max(fee.block_height), (select min(block_height) from fee where fee.token = pool_pair.token))
+ from fee where fee.token = pool_pair.token AND fee.block_height <= pool_pair.block_height)
 where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(?)
 order by pool_pair.block_height DESC     
 """.trimIndent()
@@ -436,6 +438,7 @@ object DB {
             }
 
             val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
+            println(estimate)
             if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
             previousEstimate = estimate
 
