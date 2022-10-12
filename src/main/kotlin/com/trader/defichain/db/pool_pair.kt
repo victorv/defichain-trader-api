@@ -57,7 +57,7 @@ fun updateOraclePrice(tokenID: Int, oraclePrice: Double): Boolean {
 }
 
 fun DBTX.insertPoolPairs(block: Block, poolPairs: Map<Int, PoolPair>, oraclePrices: Map<Int, Double>) {
-    insertBlock(block)
+    insertBlock(block, false)
 
     doLater {
         indexTokens()
