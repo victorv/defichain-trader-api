@@ -363,7 +363,6 @@ object DB {
     fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
         val poolPairUpdates = mutableMapOf<Int, MutableMap<Int, PoolPair>>()
         val uniquePoolIdentifiers = getSwapPaths(poolSwap).flatten().toSet().toTypedArray()
-        println(uniquePoolIdentifiers.contentToString())
 
         var minBlockHeight = Integer.MAX_VALUE
         var maxBlockHeight = Integer.MIN_VALUE
@@ -406,7 +405,6 @@ object DB {
                 }
             }
         }
-        println("$minBlockHeight $maxBlockHeight")
 
         val poolPairs = mutableMapOf<Int, PoolPair>()
         while (minBlockHeight <= maxBlockHeight) {
@@ -427,8 +425,6 @@ object DB {
             minBlockHeight++
         }
 
-        println(poolPairs.size)
-
         val metrics = ArrayList<List<Double>>()
         var previousEstimate = 0.0
         for (height in minBlockHeight..maxBlockHeight) {
@@ -438,7 +434,6 @@ object DB {
             }
 
             val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
-            println(estimate)
             if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
             previousEstimate = estimate
 
