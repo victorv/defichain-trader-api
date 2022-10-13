@@ -11,8 +11,10 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import java.io.IOException
 
 const val dummyAddress = "dLXs788fWMpGoar1WzDnLoNCNYyZVPPozv"
 private val decoder = Json {
@@ -35,20 +37,35 @@ class RPC {
                 params = JsonArray(parameters.toList())
             )
             try {
-                val response = rpcClient.post("http://${rpcConfig.host}:${rpcConfig.port}") {
-                    contentType(ContentType.Application.Json)
-                    setBody(request)
+                return doRequest<T>(request)
+            } catch (e: Throwable) {
+                if(e is IOException) {
+                    return retryRequest<T>(request)
                 }
+                throw RuntimeException("Request failed: $request", e)
+            }
+        }
 
-                val responseBody = response.body<RPCResponse<T?>>()
-                check(responseBody.result != null || responseBody.error != null) {
-                    "Request failed, invalid response body: ${request}, $responseBody"
-                }
-                return responseBody
-
+        suspend inline fun <reified T> retryRequest(request: RPCRequest): RPCResponse<T?> {
+            delay(3000)
+            try {
+                return doRequest<T>(request)
             } catch (e: Throwable) {
                 throw RuntimeException("Request failed: $request", e)
             }
+        }
+
+        suspend inline fun <reified T> doRequest(request: RPCRequest): RPCResponse<T?> {
+            val response = rpcClient.post("http://${rpcConfig.host}:${rpcConfig.port}") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+
+            val responseBody = response.body<RPCResponse<T?>>()
+            check(responseBody.result != null || responseBody.error != null) {
+                "Request failed, invalid response body: ${request}, $responseBody"
+            }
+            return responseBody
         }
 
         suspend inline fun <reified T> getValue(method: RPCMethod, vararg parameters: JsonElement): T {
