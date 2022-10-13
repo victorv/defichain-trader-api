@@ -4,7 +4,6 @@ import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.DB
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
-import com.trader.defichain.mempool.connections
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*

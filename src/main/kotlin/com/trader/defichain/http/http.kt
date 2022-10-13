@@ -51,25 +51,3 @@ data class Message(
     fun asPoolSwap() = Json.decodeFromJsonElement<PoolSwap>(data)
     fun asUUID() = Json.decodeFromJsonElement<String>(data)
 }
-
-class Connection {
-
-    private var uuid: String? = null
-    private val writableChannel = Channel<String>(10, BufferOverflow.DROP_OLDEST)
-    val poolSwaps = CopyOnWriteArrayList<PoolSwap>()
-    val channel = writableChannel as ReceiveChannel<String>
-
-    suspend fun send(message: String) {
-        if (uuid != null) {
-            writableChannel.send(message)
-        }
-    }
-
-    fun close() {
-        writableChannel.close()
-    }
-
-    fun setUUID(uuid: String) {
-        this.uuid = uuid
-    }
-}

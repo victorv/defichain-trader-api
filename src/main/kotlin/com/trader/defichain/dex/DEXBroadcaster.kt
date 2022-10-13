@@ -1,7 +1,7 @@
 package com.trader.defichain.dex
 
 import com.trader.defichain.http.Message
-import com.trader.defichain.mempool.connections
+import com.trader.defichain.http.connections
 import com.trader.defichain.zmq.newZQMBlockChannel
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString
