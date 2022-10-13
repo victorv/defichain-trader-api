@@ -6,6 +6,7 @@ import com.trader.defichain.dex.getTokenSymbol
 import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.http.Connection
 import com.trader.defichain.http.Message
+import com.trader.defichain.http.connections
 import com.trader.defichain.indexer.calculateFee
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.rpc.RPC
@@ -20,10 +21,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import java.math.BigDecimal
-import java.util.*
 import kotlin.coroutines.CoroutineContext
-
-val connections: MutableSet<Connection> = Collections.synchronizedSet(LinkedHashSet())
 
 suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
     val channel = newZMQEventChannel()
