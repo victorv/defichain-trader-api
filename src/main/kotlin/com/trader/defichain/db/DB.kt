@@ -11,7 +11,6 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.Types
-import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.math.abs
@@ -54,12 +53,14 @@ in_a,
 out_a,
 in_b,
 out_b,
-commission
+commission,
+block.time
 from pool_pair
 inner join fee on fee.token = pool_pair.token
  AND fee.block_height = 
  (select coalesce(max(fee.block_height), (select min(block_height) from fee where fee.token = pool_pair.token))
  from fee where fee.token = pool_pair.token AND fee.block_height <= pool_pair.block_height)
+inner join block on pool_pair.block_height = block.height
 where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(?)
 order by pool_pair.block_height DESC     
 """.trimIndent()
@@ -364,8 +365,10 @@ object DB {
         val poolPairUpdates = mutableMapOf<Int, MutableMap<Int, PoolPair>>()
         val uniquePoolIdentifiers = getSwapPaths(poolSwap).flatten().toSet().toTypedArray()
 
+        val blockTimes = mutableMapOf<Int, Long>()
         var minBlockHeight = Integer.MAX_VALUE
         var maxBlockHeight = Integer.MIN_VALUE
+
         connectionPool.connection.use { connection ->
             val poolIDArray = connection.createArrayOf("INT", uniquePoolIdentifiers)
 
@@ -376,6 +379,7 @@ object DB {
                         val poolID = resultSet.getInt(3)
 
                         val blockHeight = resultSet.getInt(4)
+                        blockTimes[blockHeight] = resultSet.getLong(10)
                         minBlockHeight = min(blockHeight, minBlockHeight)
                         maxBlockHeight = max(blockHeight, maxBlockHeight)
 
@@ -392,7 +396,7 @@ object DB {
                             dexFeeOutPctTokenA = resultSet.getDouble(6),
                             dexFeeInPctTokenB = resultSet.getDouble(7),
                             dexFeeOutPctTokenB = resultSet.getDouble(8),
-                            commission = resultSet.getDouble(9)
+                            commission = resultSet.getDouble(9),
                         )
 
                         var poolPairsAtHeight = poolPairUpdates[blockHeight]
@@ -440,7 +444,8 @@ object DB {
                 listOf(
                     height.toDouble(),
                     estimate,
-                    if (previousEstimate == 0.0) estimate else previousEstimate
+                    if (previousEstimate == 0.0) estimate else previousEstimate,
+                    blockTimes.getValue(height).toDouble()
                 )
             )
             previousEstimate = estimate
