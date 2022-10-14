@@ -48,6 +48,10 @@ data class Message(
     val id: String,
     val data: JsonElement,
 ) {
+    fun asSetGraph() = Json.decodeFromJsonElement<SetGraph>(data)
     fun asPoolSwap() = Json.decodeFromJsonElement<PoolSwap>(data)
     fun asUUID() = Json.decodeFromJsonElement<String>(data)
 }
+
+@kotlinx.serialization.Serializable
+data class SetGraph(val fromToken: String, val toToken: String)

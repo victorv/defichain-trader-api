@@ -14,6 +14,7 @@ class Connection {
     private val writableChannel = Channel<String>(10, BufferOverflow.DROP_OLDEST)
     val poolSwaps = CopyOnWriteArrayList<PoolSwap>()
     val channel = writableChannel as ReceiveChannel<String>
+    var graph: SetGraph? = null
 
     suspend fun send(message: String) {
         if (uuid != null) {
