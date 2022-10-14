@@ -1,10 +1,7 @@
 package com.trader.defichain.mempool
 
 import com.trader.defichain.db.DB
-import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.getTokenSymbol
-import com.trader.defichain.dex.testPoolSwap
-import com.trader.defichain.http.Connection
+import com.trader.defichain.dex.*
 import com.trader.defichain.http.Message
 import com.trader.defichain.http.connections
 import com.trader.defichain.indexer.calculateFee
@@ -72,8 +69,15 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                     )
                 ).estimate
 
+                val fromOraclePrice = getOraclePrice(swap.fromToken)
+                val fromAmountUSD = (fromOraclePrice ?: 0.0) * swap.fromAmount
+                val toOraclePrice = getOraclePrice(swap.toToken)
+                val toAmountUSD = (toOraclePrice ?: 0.0) * amountTo
+
                 val tokenTo = getTokenSymbol(swap.toToken)
                 val row = DB.PoolSwapRow(
+                    fromAmountUSD = fromAmountUSD,
+                    toAmountUSD = toAmountUSD,
                     txID = rawTX.txID,
                     fee = fee.floorPlain(),
                     amountFrom = BigDecimal(swap.fromAmount).floorPlain(),

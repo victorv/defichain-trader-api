@@ -179,10 +179,14 @@ suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
     return Pair(poolPairs, oraclePrices)
 }
 
-fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
-    val tokenId = tokenIdsFromPoolsBySymbol[tokenSymbol] ?: null
-    val token = tokensByID[tokenId] ?: return null
+fun getOraclePrice(tokenID: Int): Double? {
+    val token = tokensByID[tokenID] ?: return null
     return token.oraclePrice
+}
+
+fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
+    val tokenID = tokenIdsFromPoolsBySymbol[tokenSymbol] ?: return null
+    return getOraclePrice(tokenID)
 }
 
 private suspend fun assignOraclePrices(): Map<Int, Double> {

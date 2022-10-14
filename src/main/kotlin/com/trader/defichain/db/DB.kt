@@ -435,9 +435,15 @@ object DB {
 
             val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
             if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
-            previousEstimate = estimate
 
-            metrics.add(listOf(height.toDouble(), estimate))
+            metrics.add(
+                listOf(
+                    height.toDouble(),
+                    estimate,
+                    if (previousEstimate == 0.0) estimate else previousEstimate
+                )
+            )
+            previousEstimate = estimate
         }
 
         return metrics
@@ -491,20 +497,32 @@ object DB {
             txn = resultSet.getInt(14),
         )
 
+        val tokenFrom = resultSet.getString(7)
+        val tokenTo = resultSet.getString(8)
+        val amountFrom = resultSet.getBigDecimal(5)
+        val amountTo = resultSet.getBigDecimal(6)
+
+        val fromOraclePrice = getOraclePriceForSymbol(tokenFrom)
+        val fromAmountUSD = (fromOraclePrice ?: 0.0) * amountFrom.toDouble()
+        val toOraclePrice = getOraclePriceForSymbol(tokenTo)
+        val toAmountUSD = (toOraclePrice ?: 0.0) * (amountTo?.toDouble() ?: 0.0)
+
         return PoolSwapRow(
             txID = resultSet.getString(1),
             fee = resultSet.getBigDecimal(4).floorPlain(),
-            amountFrom = resultSet.getBigDecimal(5).floorPlain(),
-            amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
-            tokenFrom = resultSet.getString(7),
-            tokenTo = resultSet.getString(8),
+            amountFrom = amountFrom.floorPlain(),
+            amountTo = amountTo.floorPlain(),
+            tokenFrom = tokenFrom,
+            tokenTo = tokenTo,
             maxPrice = resultSet.getBigDecimal(9).floorPlain(),
             from = resultSet.getString(10),
             to = resultSet.getString(11),
+            block = blockEntry,
+            mempool = mempoolEntry,
             tokenToAlt = resultSet.getString(15),
             id = resultSet.getLong(16),
-            block = blockEntry,
-            mempool = mempoolEntry
+            fromAmountUSD = fromAmountUSD,
+            toAmountUSD = toAmountUSD
         )
     }
 
@@ -545,6 +563,8 @@ object DB {
         val mempool: MempoolEntry?,
         val tokenToAlt: String,
         val id: Long,
+        val fromAmountUSD: Double,
+        val toAmountUSD: Double,
     )
 
     @kotlinx.serialization.Serializable
