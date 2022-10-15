@@ -58,16 +58,16 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                 val fee = calculateFee(rawTX, mapOf())
 
                 if (customTX.type != "PoolSwap") continue
-                val swap = customTX.asPoolSwap()
 
-                val amountTo = testPoolSwap(
-                    PoolSwap(
-                        tokenFrom = getTokenSymbol(swap.fromToken),
-                        tokenTo = getTokenSymbol(swap.toToken),
-                        amountFrom = swap.fromAmount,
-                        desiredResult = 1.0,
-                    )
-                ).estimate
+                val swap = customTX.asPoolSwap()
+                val mempoolSwap = PoolSwap(
+                    tokenFrom = getTokenSymbol(swap.fromToken),
+                    tokenTo = getTokenSymbol(swap.toToken),
+                    amountFrom = swap.fromAmount,
+                    desiredResult = 1.0,
+                )
+
+                val amountTo = testPoolSwap(mempoolSwap).estimate
 
                 val fromOraclePrice = getOraclePrice(swap.fromToken)
                 val fromAmountUSD = (fromOraclePrice ?: 0.0) * swap.fromAmount
@@ -95,15 +95,39 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                         txn = txn,
                         time = time,
                     ),
+                    priceImpact = 0.0,
                 )
-
-                val json = Json.encodeToString(Message(
-                    id = "mempool-swap",
-                    data = Json.encodeToJsonElement(row),
-                ))
 
                 connections.forEach {
                     try {
+                        row.priceImpact = 0.0
+
+                        val graph = it.graph
+                        if (graph != null) {
+
+                            val graphSwap = PoolSwap(
+                                tokenFrom = graph.fromToken,
+                                tokenTo = graph.toToken,
+                                amountFrom = 1.0,
+                                desiredResult = 1.0,
+                            )
+
+                            val pools = getPools()
+                            val estimate = executeSwaps(listOf(graphSwap), pools).swapResults[0].estimate
+                            val secondEstimate =
+                                executeSwaps(listOf(mempoolSwap, graphSwap), pools).swapResults[1].estimate
+                            if (estimate != secondEstimate) {
+                                row.priceImpact = ((secondEstimate - estimate) / ((secondEstimate + estimate) / 2.0)) * 100.0
+                            }
+                        }
+
+                        val json = Json.encodeToString(
+                            Message(
+                                id = "mempool-swap",
+                                data = Json.encodeToJsonElement(row),
+                            )
+                        )
+
                         it.send(json)
                     } catch (e: Throwable) {
                         it.close()

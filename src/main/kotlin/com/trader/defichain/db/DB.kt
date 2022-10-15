@@ -527,7 +527,8 @@ object DB {
             tokenToAlt = resultSet.getString(15),
             id = resultSet.getLong(16),
             fromAmountUSD = fromAmountUSD,
-            toAmountUSD = toAmountUSD
+            toAmountUSD = toAmountUSD,
+            priceImpact = 0.0,
         )
     }
 
@@ -570,6 +571,7 @@ object DB {
         val id: Long,
         val fromAmountUSD: Double,
         val toAmountUSD: Double,
+        var priceImpact: Double
     )
 
     @kotlinx.serialization.Serializable

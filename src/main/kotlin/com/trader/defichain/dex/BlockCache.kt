@@ -144,7 +144,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
         }
 
     return DexResult(
-        swapResults = swapResults.sortedByDescending { it.estimate },
+        swapResults = swapResults,
         poolResults = poolResults
     )
 }
