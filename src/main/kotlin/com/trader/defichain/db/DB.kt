@@ -444,7 +444,6 @@ object DB {
                 listOf(
                     height.toDouble(),
                     estimate,
-                    if (previousEstimate == 0.0) estimate else previousEstimate,
                     blockTimes.getValue(height).toDouble()
                 )
             )
