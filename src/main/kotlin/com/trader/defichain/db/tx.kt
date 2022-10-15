@@ -7,7 +7,7 @@ import java.math.BigDecimal
 
 private const val template_insertBlock = """
 INSERT INTO block (height, time, hash, finalized) VALUES (?, ?, ?, ?)
-ON CONFLICT (height) DO UPDATE SET finalized = ?
+ON CONFLICT (height) DO UPDATE SET time = ?, finalized = ?
 """
 
 private const val template_insertMempoolTX = """
@@ -38,10 +38,11 @@ RETURNING row_id;
 fun DBTX.insertBlock(block: Block, finalized: Boolean) = doLater {
     connection.prepareStatement(template_insertBlock).use {
         it.setInt(1, block.height)
-        it.setLong(2, block.time)
+        it.setLong(2, block.medianTime)
         it.setString(3, block.hash)
         it.setBoolean(4, finalized)
-        it.setBoolean(5, finalized)
+        it.setLong(5, block.medianTime)
+        it.setBoolean(6, finalized)
         insertOrDoNothing(it)
     }
 }

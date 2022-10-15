@@ -38,7 +38,8 @@ data class Block(
     val height: Int,
     val hash: String,
     val tx: List<TX>,
-    val time: Long,
+    @JsonNames("mediantime")
+    val medianTime: Long,
     @JsonNames("previousblockhash")
     val previousBlockHash: String? = null,
 ) {

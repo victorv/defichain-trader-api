@@ -143,7 +143,7 @@ private suspend fun indexZMQPair(
             type = customTX.type,
             txn = txn,
             blockHeight = block.height,
-            blockTime = block.time,
+            blockTime = block.medianTime,
         )
 
         dbTX.insertMintedTX(txRowID, mintedTX)
