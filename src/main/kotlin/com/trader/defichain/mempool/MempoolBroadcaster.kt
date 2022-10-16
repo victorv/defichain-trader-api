@@ -113,9 +113,9 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                             )
 
                             val pools = getPools()
-                            val estimate = executeSwaps(listOf(graphSwap), pools).swapResults[0].estimate
+                            val estimate = executeSwaps(listOf(graphSwap), pools, false).swapResults[0].estimate
                             val secondEstimate =
-                                executeSwaps(listOf(mempoolSwap, graphSwap), pools).swapResults[1].estimate
+                                executeSwaps(listOf(mempoolSwap, graphSwap), pools, false).swapResults[1].estimate
                             if (estimate != secondEstimate) {
                                 row.priceImpact = ((secondEstimate - estimate) / ((secondEstimate + estimate) / 2.0)) * 100.0
                             }

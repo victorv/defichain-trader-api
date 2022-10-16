@@ -39,7 +39,7 @@ fun getPoolID(tokenA: Int, tokenB: Int): Int {
         .key
 }
 
-fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>): DexResult {
+fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>, forceBestPath: Boolean): DexResult {
     var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()
     val swapResults = ArrayList<SwapResult>()
 
@@ -113,8 +113,14 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
             allPathsExplained.filter { it.status && it.tradeEnabled && !it.overflow }.maxOfOrNull { it.estimate } ?: 0.0
         val desiredResult = poolSwap.desiredResult!!
         val maxPrice = poolSwap.amountFrom / desiredResult
-        val pathsBestToWorst =
+        var pathsBestToWorst =
             allPathsExplained.sortedByDescending { if (it.isBad()) -1.0 * it.estimate else it.estimate }
+
+        val directPath = pathsBestToWorst.find { it.swaps.size == 1 && it.status && it.tradeEnabled }
+        if (!forceBestPath && directPath != null) {
+            pathsBestToWorst = listOf(directPath)
+        }
+
         val swapResult = SwapResult(
             estimate = bestEstimate,
             desiredResult = poolSwap.desiredResult,

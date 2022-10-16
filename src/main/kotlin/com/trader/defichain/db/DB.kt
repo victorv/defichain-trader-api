@@ -437,7 +437,7 @@ object DB {
                 poolPairs[poolID] = poolPair
             }
 
-            val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
+            val estimate = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().estimate
             if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
 
             metrics.add(
