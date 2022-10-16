@@ -11,7 +11,6 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.Types
-import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.math.abs
@@ -54,12 +53,14 @@ in_a,
 out_a,
 in_b,
 out_b,
-commission
+commission,
+block.time
 from pool_pair
 inner join fee on fee.token = pool_pair.token
  AND fee.block_height = 
  (select coalesce(max(fee.block_height), (select min(block_height) from fee where fee.token = pool_pair.token))
  from fee where fee.token = pool_pair.token AND fee.block_height <= pool_pair.block_height)
+inner join block on pool_pair.block_height = block.height
 where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(?)
 order by pool_pair.block_height DESC     
 """.trimIndent()
@@ -364,8 +365,10 @@ object DB {
         val poolPairUpdates = mutableMapOf<Int, MutableMap<Int, PoolPair>>()
         val uniquePoolIdentifiers = getSwapPaths(poolSwap).flatten().toSet().toTypedArray()
 
+        val blockTimes = mutableMapOf<Int, Long>()
         var minBlockHeight = Integer.MAX_VALUE
         var maxBlockHeight = Integer.MIN_VALUE
+
         connectionPool.connection.use { connection ->
             val poolIDArray = connection.createArrayOf("INT", uniquePoolIdentifiers)
 
@@ -376,6 +379,7 @@ object DB {
                         val poolID = resultSet.getInt(3)
 
                         val blockHeight = resultSet.getInt(4)
+                        blockTimes[blockHeight] = resultSet.getLong(10)
                         minBlockHeight = min(blockHeight, minBlockHeight)
                         maxBlockHeight = max(blockHeight, maxBlockHeight)
 
@@ -392,7 +396,7 @@ object DB {
                             dexFeeOutPctTokenA = resultSet.getDouble(6),
                             dexFeeInPctTokenB = resultSet.getDouble(7),
                             dexFeeOutPctTokenB = resultSet.getDouble(8),
-                            commission = resultSet.getDouble(9)
+                            commission = resultSet.getDouble(9),
                         )
 
                         var poolPairsAtHeight = poolPairUpdates[blockHeight]
@@ -433,11 +437,17 @@ object DB {
                 poolPairs[poolID] = poolPair
             }
 
-            val estimate = executeSwaps(listOf(poolSwap), poolPairs).swapResults.first().estimate
+            val estimate = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().estimate
             if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
-            previousEstimate = estimate
 
-            metrics.add(listOf(height.toDouble(), estimate))
+            metrics.add(
+                listOf(
+                    height.toDouble(),
+                    estimate,
+                    blockTimes.getValue(height).toDouble()
+                )
+            )
+            previousEstimate = estimate
         }
 
         return metrics
@@ -491,20 +501,33 @@ object DB {
             txn = resultSet.getInt(14),
         )
 
+        val tokenFrom = resultSet.getString(7)
+        val tokenTo = resultSet.getString(8)
+        val amountFrom = resultSet.getBigDecimal(5)
+        val amountTo = resultSet.getBigDecimal(6)
+
+        val fromOraclePrice = getOraclePriceForSymbol(tokenFrom)
+        val fromAmountUSD = (fromOraclePrice ?: 0.0) * amountFrom.toDouble()
+        val toOraclePrice = getOraclePriceForSymbol(tokenTo)
+        val toAmountUSD = (toOraclePrice ?: 0.0) * (amountTo?.toDouble() ?: 0.0)
+
         return PoolSwapRow(
             txID = resultSet.getString(1),
             fee = resultSet.getBigDecimal(4).floorPlain(),
-            amountFrom = resultSet.getBigDecimal(5).floorPlain(),
-            amountTo = resultSet.getBigDecimal(6)?.floorPlain(),
-            tokenFrom = resultSet.getString(7),
-            tokenTo = resultSet.getString(8),
+            amountFrom = amountFrom.floorPlain(),
+            amountTo = amountTo.floorPlain(),
+            tokenFrom = tokenFrom,
+            tokenTo = tokenTo,
             maxPrice = resultSet.getBigDecimal(9).floorPlain(),
             from = resultSet.getString(10),
             to = resultSet.getString(11),
+            block = blockEntry,
+            mempool = mempoolEntry,
             tokenToAlt = resultSet.getString(15),
             id = resultSet.getLong(16),
-            block = blockEntry,
-            mempool = mempoolEntry
+            fromAmountUSD = fromAmountUSD,
+            toAmountUSD = toAmountUSD,
+            priceImpact = 0.0,
         )
     }
 
@@ -545,6 +568,9 @@ object DB {
         val mempool: MempoolEntry?,
         val tokenToAlt: String,
         val id: Long,
+        val fromAmountUSD: Double,
+        val toAmountUSD: Double,
+        var priceImpact: Double
     )
 
     @kotlinx.serialization.Serializable

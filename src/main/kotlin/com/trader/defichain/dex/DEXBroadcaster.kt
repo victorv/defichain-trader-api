@@ -1,5 +1,6 @@
 package com.trader.defichain.dex
 
+import com.trader.defichain.http.Connection
 import com.trader.defichain.http.Message
 import com.trader.defichain.http.connections
 import com.trader.defichain.zmq.newZQMBlockChannel
@@ -28,16 +29,35 @@ private suspend fun broadcast() {
 
         try {
             for (poolSwap in connection.poolSwaps) {
-                val swapResult = testPoolSwap(poolSwap)
+                sendSwapResult("swap-result", poolSwap, connection)
+            }
 
-                val message = Message(
-                    id = "swap-result",
-                    data = Json.encodeToJsonElement(swapResult),
+            val graph = connection.graph
+            if (graph != null) {
+                val swap = PoolSwap(
+                    amountFrom = 1.0,
+                    tokenFrom = graph.fromToken,
+                    tokenTo = graph.toToken,
+                    desiredResult = 1.0,
                 )
-                connection.send(Json.encodeToString(message))
+                sendSwapResult("graph-data-point", swap, connection)
             }
         } catch (e: Throwable) {
+            e.printStackTrace()
             connection.close()
         }
     }
+}
+
+private suspend fun sendSwapResult(
+    id: String,
+    swap: PoolSwap,
+    connection: Connection
+) {
+    val swapResult = testPoolSwap(swap)
+    val message = Message(
+        id = id,
+        data = Json.encodeToJsonElement(swapResult),
+    )
+    connection.send(Json.encodeToString(message))
 }

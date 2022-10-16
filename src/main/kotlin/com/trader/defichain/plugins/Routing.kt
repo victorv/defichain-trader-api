@@ -69,6 +69,10 @@ fun Application.configureRouting() {
                                 )
                                 connection.send(Json.encodeToString(message))
                             }
+                            "set-graph" -> {
+                                val graph = message.asSetGraph()
+                                connection.graph = graph
+                            }
                         }
                     }
                 }

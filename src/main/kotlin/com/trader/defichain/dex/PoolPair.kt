@@ -3,6 +3,7 @@ package com.trader.defichain.dex
 import com.trader.defichain.util.floor
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -27,9 +28,9 @@ object TokenIDSerializer : KSerializer<Int> {
 data class PoolPair(
     val symbol: String,
     val status: Boolean,
-    @kotlinx.serialization.Serializable(with = TokenIDSerializer::class)
+    @Serializable(with = TokenIDSerializer::class)
     val idTokenA: Int,
-    @kotlinx.serialization.Serializable(with = TokenIDSerializer::class)
+    @Serializable(with = TokenIDSerializer::class)
     val idTokenB: Int,
     val dexFeeInPctTokenA: Double? = null,
     val dexFeeOutPctTokenA: Double? = null,

@@ -39,7 +39,7 @@ fun getPoolID(tokenA: Int, tokenB: Int): Int {
         .key
 }
 
-fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>): DexResult {
+fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>, forceBestPath: Boolean): DexResult {
     var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()
     val swapResults = ArrayList<SwapResult>()
 
@@ -59,8 +59,8 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
         for (path in paths) {
             val poolsForSwap = poolsForAllSwaps.map {
                 it.key to it.value.copy(
-                    reserveA = it.value.reserveA,
-                    reserveB = it.value.reserveB,
+                    reserveA = it.value.modifiedReserveA.toDouble(),
+                    reserveB = it.value.modifiedReserveB.toDouble(),
                 )
             }.toMap().toMutableMap()
 
@@ -114,8 +114,14 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
             allPathsExplained.filter { it.status && it.tradeEnabled && !it.overflow }.maxOfOrNull { it.estimate } ?: 0.0
         val desiredResult = poolSwap.desiredResult!!
         val maxPrice = poolSwap.amountFrom / desiredResult
-        val pathsBestToWorst =
+        var pathsBestToWorst =
             allPathsExplained.sortedByDescending { if (it.isBad()) -1.0 * it.estimate else it.estimate }
+
+        val directPath = pathsBestToWorst.find { it.swaps.size == 1 && it.status && it.tradeEnabled }
+        if (!forceBestPath && directPath != null) {
+            pathsBestToWorst = listOf(directPath)
+        }
+
         val swapResult = SwapResult(
             estimate = bestEstimate,
             desiredResult = poolSwap.desiredResult,
@@ -145,7 +151,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
         }
 
     return DexResult(
-        swapResults = swapResults.sortedByDescending { it.estimate },
+        swapResults = swapResults,
         poolResults = poolResults
     )
 }
@@ -180,10 +186,14 @@ suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
     return Pair(poolPairs, oraclePrices)
 }
 
-fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
-    val tokenId = tokenIdsFromPoolsBySymbol[tokenSymbol] ?: null
-    val token = tokensByID[tokenId] ?: return null
+fun getOraclePrice(tokenID: Int): Double? {
+    val token = tokensByID[tokenID] ?: return null
     return token.oraclePrice
+}
+
+fun getOraclePriceForSymbol(tokenSymbol: String): Double? {
+    val tokenID = tokenIdsFromPoolsBySymbol[tokenSymbol] ?: return null
+    return getOraclePrice(tokenID)
 }
 
 private suspend fun assignOraclePrices(): Map<Int, Double> {

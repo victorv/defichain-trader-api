@@ -1,10 +1,9 @@
 package com.trader.defichain.dex
 
 import kotlinx.serialization.Serializable
-import kotlin.math.abs
 
 fun testPoolSwap(poolSwap: AbstractPoolSwap): SwapResult {
-    return executeSwaps(listOf(poolSwap), getPools()).swapResults.first()
+    return executeSwaps(listOf(poolSwap), getPools(), true).swapResults.first()
 }
 
 interface AbstractPoolSwap {
@@ -28,23 +27,6 @@ data class PoolSwap(
         check(amountFrom > 0 && amountFrom < 999999999) { "Invalid `amount from`: $amountFrom" }
         check(getTokenId(tokenFrom) != null) { "Unable to resolve: $tokenFrom" }
         check(getTokenId(tokenTo) != null) { "Unable to resolve: $tokenTo" }
-    }
-
-    fun updateEstimate(estimate: Double): Boolean {
-        if (this.estimate == 0.0) {
-            if (estimate == 0.0) {
-                return false
-            }
-            this.estimate = estimate
-            return true
-        }
-
-        val diff = abs(100.0 / this.estimate * estimate - 100.0)
-        if (diff > 0.05) { // 0.05%
-            this.estimate = estimate
-            return true
-        }
-        return false
     }
 
     fun checkDesiredResult() =
