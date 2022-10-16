@@ -59,8 +59,8 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
         for (path in paths) {
             val poolsForSwap = poolsForAllSwaps.map {
                 it.key to it.value.copy(
-                    reserveA = it.value.reserveA,
-                    reserveB = it.value.reserveB,
+                    reserveA = it.value.modifiedReserveA.toDouble(),
+                    reserveB = it.value.modifiedReserveB.toDouble(),
                 )
             }.toMap().toMutableMap()
 
