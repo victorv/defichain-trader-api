@@ -80,6 +80,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
 
                 val (symbolA, symbolB) = pool.symbol.split("-")
                 val (explanation, result) = pool.swap(tokenFrom, amountFrom)
+                explanation.poolSymbol = pool.symbol
 
                 pathExplained.add(explanation)
                 amountFrom = result
@@ -300,6 +301,7 @@ data class PoolSwapExplained(
     val status: Boolean,
     val tradeEnabled: Boolean,
     val overflow: Boolean,
+    var poolSymbol: String = "Undefined",
 )
 
 @kotlinx.serialization.Serializable
