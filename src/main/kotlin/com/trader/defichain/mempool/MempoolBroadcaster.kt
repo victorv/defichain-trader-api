@@ -105,10 +105,12 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                         val graph = it.graph
                         if (graph != null) {
 
+                            val tokenID = getTokenId(graph.fromToken)
+                            val oraclePrice = if (tokenID != null) getOraclePrice(tokenID) ?: 1.0 else 1.0
                             val graphSwap = PoolSwap(
                                 tokenFrom = graph.fromToken,
                                 tokenTo = graph.toToken,
-                                amountFrom = 1.0,
+                                amountFrom = 1000.0 / oraclePrice,
                                 desiredResult = 1.0,
                             )
 
