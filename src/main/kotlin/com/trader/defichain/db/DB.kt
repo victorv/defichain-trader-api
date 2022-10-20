@@ -64,8 +64,8 @@ coalesce(s.tx_count, 0) as sold_tx_count,
 coalesce(b.amount, 0) as bought, 
 coalesce(b.amount_usd, 0) as bought_usd, 
 coalesce(b.tx_count, 0) as bought_tx_count, 
-coalesce(b.amount - s.amount, 0) net, 
-coalesce(b.amount_usd - s.amount_usd, 0) net_usd,
+coalesce(b.amount, 0) - coalesce(s.amount, 0) net, 
+coalesce(b.amount_usd, 0) - coalesce(s.amount_usd, 0) net_usd,
 coalesce(b.dc_token_symbol, s.dc_token_symbol) as token_symbol
 from sold_usd s full outer join bought_usd b on b.dc_token_symbol=s.dc_token_symbol;
 """.trimIndent()
