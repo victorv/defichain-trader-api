@@ -32,10 +32,10 @@ suspend fun indexZMQBatches(coroutineContext: CoroutineContext) {
                 var blockHeight = -500
                 try {
                     if (!missingBlocks.hasNext()) {
-                        missingBlocks = DB.selectAll<Int>("blocks_not_finalized").iterator()
+                        missingBlocks = DB.selectAll<Int>("select * from blocks_not_finalized").iterator()
                     }
                     if (!missingBlocks.hasNext()) {
-                        missingBlocks = DB.selectAll<Int>("missing_blocks").iterator()
+                        missingBlocks = DB.selectAll<Int>("select * from missing_blocks").iterator()
                     }
 
                     if (missingBlocks.hasNext()) {

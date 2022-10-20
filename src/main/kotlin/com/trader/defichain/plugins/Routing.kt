@@ -10,6 +10,7 @@ import io.ktor.server.http.content.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.util.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
@@ -104,11 +105,10 @@ fun Application.configureRouting() {
             call.response.header(HttpHeaders.ContentEncoding, "gzip")
             call.respondBytes(ContentType.Application.Json) { response }
         }
-        get("/tokens/sold-recently") {
-            call.respond(DB.tokensSoldRecently())
-        }
-        get("/tokens/bought-recently") {
-            call.respond(DB.tokensBoughtRecently())
+        get("/stats") {
+            val template = call.request.queryParameters["template"]!!
+            val period = call.request.queryParameters["period"]!!.toInt()
+            call.respond(DB.stats(template, period))
         }
         post("/poolswaps") {
             val filter = call.receive<DB.PoolHistoryFilter>()

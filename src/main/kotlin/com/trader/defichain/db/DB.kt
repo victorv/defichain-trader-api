@@ -16,30 +16,58 @@ import kotlin.collections.HashMap
 import kotlin.math.abs
 import kotlin.math.min
 
-private val template_tokensSoldRecently = """
+@Language("sql")
+private val template_boughtSold = """
+with latest_oracle as (
+select token, max(block_height) as block_height from oracle_price group by token
+),
+latest_oracle_price as (
+select oracle_price.token, oracle_price.price from oracle_price 
+inner join latest_oracle lo on lo.token=oracle_price.token AND lo.block_height=oracle_price.block_height
+),
+sold as (
 select 
-sum(amount_from) as sold,
+sum(amount_from) as sold,	
 count(*) as tx_count,
-token.dc_token_symbol as token_symbol,
-max(block_height) as most_recent_block_height
+dc_token_id
 from pool_swap 
-inner join token on dc_token_id = token_from 
+inner join token on dc_token_id = token_from	
 inner join minted_tx on pool_swap.tx_row_id = minted_tx.tx_row_id 
-where block_height >= (select max(block_height) from minted_tx) - 120 
-group by token.dc_token_symbol;
-""".trimIndent()
-
-private val template_tokensBoughtRecently = """
+where block_height >= (select max(block_height) from minted_tx) - :period
+group by token.dc_token_id
+),
+sold_usd as (
+select s.sold as amount, s.tx_count, s.sold * lop.price as amount_usd, token.dc_token_symbol from sold s
+inner join latest_oracle_price lop on lop.token = dc_token_id 
+inner join token on token.dc_token_id = s.dc_token_id
+),
+bought as (
 select 
 sum(amount_to) as bought,
 count(*) as tx_count,
-token.dc_token_symbol as token_symbol,
-max(block_height) as most_recent_block_height
+dc_token_id
 from pool_swap 
 inner join token on dc_token_id = token_to 
 inner join minted_tx on pool_swap.tx_row_id = minted_tx.tx_row_id 
-where block_height >= (select max(block_height) from minted_tx) - 120 
-group by token.dc_token_symbol;
+where block_height >= (select max(block_height) from minted_tx) - :period 
+group by token.dc_token_id
+),
+bought_usd as (
+select b.bought as amount, b.tx_count, b.bought * lop.price as amount_usd, token.dc_token_symbol from bought b
+inner join latest_oracle_price lop on lop.token = dc_token_id 
+inner join token on token.dc_token_id = b.dc_token_id
+)
+select 
+coalesce(s.amount, 0) as sold, 
+coalesce(s.amount_usd, 0) as sold_usd, 
+coalesce(s.tx_count, 0) as sold_tx_count, 
+coalesce(b.amount, 0) as bought, 
+coalesce(b.amount_usd, 0) as bought_usd, 
+coalesce(b.tx_count, 0) as bought_tx_count, 
+coalesce(b.amount - s.amount, 0) net, 
+coalesce(b.amount_usd - s.amount_usd, 0) net_usd,
+coalesce(b.dc_token_symbol, s.dc_token_symbol) as token_symbol
+from sold_usd s full outer join bought_usd b on b.dc_token_symbol=s.dc_token_symbol;
 """.trimIndent()
 
 @Language("sql")
@@ -136,6 +164,9 @@ left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
+private val templates = mapOf(
+    "bought_sold" to template_boughtSold
+)
 val connectionPool = createReadonlyDataSource()
 
 private fun createReadonlyDataSource(): PGSimpleDataSource {
@@ -177,11 +208,18 @@ object DB {
         else -> throw IllegalArgumentException("Can not convert to JsonElement: $value")
     }
 
-    inline fun <reified T> selectAll(view: String): MutableList<T> {
+    inline fun <reified T> selectAll(query: String): MutableList<T> {
         val results = ArrayList<T>()
+        for(record in selectAllRecords(query)) {
+            results.add(Json.decodeFromJsonElement(record))
+        }
+        return results
+    }
+    inline fun  selectAllRecords(query: String): MutableList<JsonObject> {
+        val results = ArrayList<JsonObject>()
         connectionPool.connection.use {
 
-            it.prepareStatement("select * from $view;").use { statement ->
+            it.prepareStatement(query).use { statement ->
 
                 statement.executeQuery().use { resultSet ->
 
@@ -209,7 +247,7 @@ object DB {
                                 )
                             }
 
-                            results.add(Json.decodeFromJsonElement(JsonObject(properties)))
+                            results.add(JsonObject(properties))
                         }
                     }
                 }
@@ -453,38 +491,10 @@ object DB {
         return metrics
     }
 
-    fun tokensSoldRecently() = calcTokenAggregate(template_tokensSoldRecently)
-    fun tokensBoughtRecently() = calcTokenAggregate(template_tokensBoughtRecently)
-    private fun calcTokenAggregate(sql: String): List<TokenAggregate> {
-        val aggregates = ArrayList<TokenAggregate>()
-        connectionPool.connection.use {
-
-            it.prepareStatement(sql).use { statement ->
-                statement.executeQuery().use { resultSet ->
-                    while (resultSet.next()) {
-
-                        val aggregate = resultSet.getDouble(1)
-                        val txCount = resultSet.getInt(2)
-                        val tokenSymbol = resultSet.getString(3)
-                        val mostRecentBlockHeight = resultSet.getLong(4)
-
-                        val oraclePrice = getOraclePriceForSymbol(tokenSymbol)
-                        val aggregateUSD = (oraclePrice ?: 0.0) * aggregate
-
-                        aggregates.add(
-                            TokenAggregate(
-                                aggregate = aggregate,
-                                aggregateUSD = aggregateUSD,
-                                txCount = txCount,
-                                tokenSymbol = tokenSymbol,
-                                mostRecentBlockHeight = mostRecentBlockHeight
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        return aggregates.sortedByDescending { it.aggregateUSD }
+    fun stats(templateName: String, period: Int): List<JsonObject> {
+        val template = templates.getValue(templateName)
+        val sql = template.replace(":period", period.toString())
+        return selectAllRecords(sql)
     }
 
     private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
