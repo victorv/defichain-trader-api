@@ -542,15 +542,6 @@ object DB {
     }
 
     @kotlinx.serialization.Serializable
-    data class TokenAggregate(
-        val tokenSymbol: String,
-        val aggregate: Double,
-        val txCount: Int,
-        val aggregateUSD: Double,
-        val mostRecentBlockHeight: Long,
-    )
-
-    @kotlinx.serialization.Serializable
     data class BlockEntry(
         val blockHeight: Int,
         val txn: Int,
