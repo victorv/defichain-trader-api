@@ -10,7 +10,6 @@ import io.ktor.server.http.content.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.util.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
@@ -108,7 +107,9 @@ fun Application.configureRouting() {
         get("/stats") {
             val template = call.request.queryParameters["template"]!!
             val period = call.request.queryParameters["period"]!!.toInt()
-            call.respond(DB.stats(template, period))
+            val tokenFrom = getTokenId(call.request.queryParameters["tokenFrom"] ?: "Any") ?: -1
+            val tokenTo = getTokenId(call.request.queryParameters["tokenTo"] ?: "Any") ?: -1
+            call.respond(DB.stats(template, period, tokenFrom, tokenTo))
         }
         post("/poolswaps") {
             val filter = call.receive<DB.PoolHistoryFilter>()
