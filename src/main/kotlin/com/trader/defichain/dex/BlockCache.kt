@@ -7,6 +7,8 @@ import com.trader.defichain.rpc.Token
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 
+private val crypto = setOf("USDT", "USDC", "BTC", "ETH", "DFI", "DOGE", "LTC", "BCH")
+
 private var tokensByID = mapOf<Int, Token>()
 private var tokenIdsFromPoolsBySymbol = mapOf<String, Int>()
 private var tokensCached = "{}".toByteArray(StandardCharsets.UTF_8)
@@ -28,6 +30,59 @@ fun getTokenSymbol(tokenId: Int): String {
 }
 
 fun getTokenId(tokenSymbol: String): Int? = tokenIdsFromPoolsBySymbol[tokenSymbol]
+
+private fun cryptoTokenIdentifiers(): Array<Int> {
+    val identifiers = mutableSetOf<Int>()
+    for (symbol in crypto) {
+        val tokenID = getTokenId(symbol)
+        if (tokenID != null) {
+            identifiers.add(tokenID)
+        }
+    }
+    return identifiers.toTypedArray()
+}
+
+private fun stock(includeDUSD: Boolean): Array<Int> {
+    val identifiers = mutableSetOf<Int>()
+    for (poolPair in poolPairs.values) {
+        if (poolPair.idTokenB === 15) {
+            val tokenID = poolPair.idTokenA
+            val token = tokensByID[tokenID]
+            if (token != null && token.symbol != "DFI" && token.symbol != "USDC" && token.symbol != "USDT") {
+                identifiers.add(tokenID)
+            }
+        }
+    }
+    if (includeDUSD) {
+        identifiers.add(15)
+    }
+    return identifiers.toTypedArray()
+}
+
+private fun usdtOrUSDC(): Array<Int> {
+    val usdc = getTokenId("USDC")!!
+    val usdt = getTokenId("USDT")!!
+    return arrayOf(usdc, usdt)
+}
+
+fun getTokenIdentifiers(tokenSymbol: String?): Array<Int> {
+    if (tokenSymbol == null) {
+        return arrayOf()
+    }
+
+    val tokenID = tokenIdsFromPoolsBySymbol[tokenSymbol]
+    if (tokenID != null) {
+        return arrayOf(tokenID)
+    }
+
+    return when (tokenSymbol.lowercase()) {
+        "crypto" -> cryptoTokenIdentifiers()
+        "stock" -> stock(false)
+        "dusd_or_stock" -> stock(true)
+        "usdt_or_usdc" -> usdtOrUSDC()
+        else -> arrayOf()
+    }
+}
 
 fun getPools() = poolPairs
 fun getPool(poolId: Int) = poolPairs.getValue(poolId)

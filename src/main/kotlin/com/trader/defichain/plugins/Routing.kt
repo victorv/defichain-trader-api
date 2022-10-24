@@ -107,9 +107,9 @@ fun Application.configureRouting() {
         get("/stats") {
             val template = call.request.queryParameters["template"]!!
             val period = call.request.queryParameters["period"]!!.toInt()
-            val tokenFrom = getTokenId(call.request.queryParameters["tokenFrom"] ?: "Any") ?: -1
-            val tokenTo = getTokenId(call.request.queryParameters["tokenTo"] ?: "Any") ?: -1
-            call.respond(DB.stats(template, period, tokenFrom, tokenTo))
+            val tokensFrom = getTokenIdentifiers(call.request.queryParameters["tokenFrom"])
+            val tokensTo = getTokenIdentifiers(call.request.queryParameters["tokenTo"])
+            call.respond(DB.stats(template, period, tokensFrom, tokensTo))
         }
         post("/poolswaps") {
             val filter = call.receive<DB.PoolHistoryFilter>()

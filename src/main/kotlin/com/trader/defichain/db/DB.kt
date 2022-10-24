@@ -46,8 +46,8 @@ bought * bo.price as bought_usd,
 tx_count
 from bought_sold
 inner join address on address.row_id = "from"
-inner join latest_oracle_price so on so.token = token_from AND (:token_from = -1 or :token_from = token_from)
-inner join latest_oracle_price bo on bo.token = token_to AND (:token_to = -1 or :token_to = token_to)
+inner join latest_oracle_price so on so.token = token_from AND :token_from
+inner join latest_oracle_price bo on bo.token = token_to AND :token_to
 ),
 bought_sold_agg as (
 select 
@@ -262,12 +262,13 @@ object DB {
 
     inline fun <reified T> selectAll(query: String): MutableList<T> {
         val results = ArrayList<T>()
-        for(record in selectAllRecords(query)) {
+        for (record in selectAllRecords(query)) {
             results.add(Json.decodeFromJsonElement(record))
         }
         return results
     }
-    inline fun  selectAllRecords(query: String): MutableList<JsonObject> {
+
+    inline fun selectAllRecords(query: String): MutableList<JsonObject> {
         val results = ArrayList<JsonObject>()
         connectionPool.connection.use {
 
@@ -543,11 +544,18 @@ object DB {
         return metrics
     }
 
-    fun stats(templateName: String, period: Int, tokenFrom: Int, tokenTo: Int): List<JsonObject> {
+    private fun toIsAny(columnName: String, tokenIdentifiers: Array<Int>): String {
+        if (tokenIdentifiers.isEmpty()) {
+            return "NULL IS NULL"
+        }
+        return "$columnName IN (${tokenIdentifiers.joinToString(",") { it.toString() }})"
+    }
+
+    fun stats(templateName: String, period: Int, tokensFrom: Array<Int>, tokensTo: Array<Int>): List<JsonObject> {
         val template = templates.getValue(templateName)
         var sql = template.replace(":period", period.toString())
-        sql = sql.replace(":token_from", tokenFrom.toString())
-        sql = sql.replace(":token_to", tokenTo.toString())
+        sql = sql.replace(":token_from", toIsAny("token_from", tokensFrom))
+        sql = sql.replace(":token_to", toIsAny("token_to", tokensTo))
         return selectAllRecords(sql)
     }
 
