@@ -13,7 +13,8 @@ private var tokensByID = mapOf<Int, Token>()
 private var tokenIdsFromPoolsBySymbol = mapOf<String, Int>()
 private var tokensCached = "{}".toByteArray(StandardCharsets.UTF_8)
 private var poolPairsSignature = ""
-private var poolPairs = mapOf<Int, PoolPair>()
+private var pools = mapOf<Int, PoolPair>()
+private var allPools = mapOf<Int, PoolPair>()
 private var poolPairsCached = "{}".toByteArray(StandardCharsets.UTF_8)
 private var swapPaths = mutableMapOf<String, List<List<Int>>>()
 fun getCachedPoolPairs() = poolPairsCached
@@ -44,7 +45,7 @@ private fun cryptoTokenIdentifiers(): Array<Int> {
 
 private fun stock(includeDUSD: Boolean): Array<Int> {
     val identifiers = mutableSetOf<Int>()
-    for (poolPair in poolPairs.values) {
+    for (poolPair in pools.values) {
         if (poolPair.idTokenB === 15) {
             val tokenID = poolPair.idTokenA
             val token = tokensByID[tokenID]
@@ -84,12 +85,15 @@ fun getTokenIdentifiers(tokenSymbol: String?): Array<Int> {
     }
 }
 
-fun getPools() = poolPairs
-fun getPool(poolId: Int) = poolPairs.getValue(poolId)
+fun getActivePools() = pools
+
+fun getAllPools() = allPools
+
+fun getPool(poolId: Int) = pools.getValue(poolId)
 
 fun getPoolID(tokenA: Int, tokenB: Int): Int {
     val tokens = setOf(tokenA, tokenB)
-    return poolPairs.entries
+    return pools.entries
         .first { tokens.contains(it.value.idTokenA) && tokens.contains(it.value.idTokenB) }
         .key
 }
@@ -213,7 +217,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
 
 private fun isTradeable(token: Token) = token.destructionHeight == -1 && token.tradeable
 suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
-    val allPools = RPC.listPoolPairs()
+    allPools = RPC.listPoolPairs()
 
     val signature = allPools.keys.sorted().joinToString(",")
     val isNewSignature = signature != poolPairsSignature
@@ -223,7 +227,7 @@ suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
     }
 
     val latestPools = filterPools(allPools)
-    if (latestPools == poolPairs) {
+    if (latestPools == pools) {
         return Pair(emptyMap(), emptyMap())
     }
 
@@ -234,11 +238,11 @@ suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
         }, tokenIdsFromPoolsBySymbol)
     }
 
-    poolPairs = latestPools
-    poolPairsCached = gzip(poolPairs)
+    pools = latestPools
+    poolPairsCached = gzip(pools)
 
     val oraclePrices = assignOraclePrices()
-    return Pair(poolPairs, oraclePrices)
+    return Pair(pools, oraclePrices)
 }
 
 fun getOraclePrice(tokenID: Int): Double? {
