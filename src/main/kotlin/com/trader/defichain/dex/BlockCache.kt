@@ -89,11 +89,11 @@ fun getActivePools() = pools
 
 fun getAllPools() = allPools
 
-fun getPool(poolId: Int) = pools.getValue(poolId)
+fun getPool(poolId: Int) = allPools.getValue(poolId)
 
 fun getPoolID(tokenA: Int, tokenB: Int): Int {
     val tokens = setOf(tokenA, tokenB)
-    return pools.entries
+    return allPools.entries
         .first { tokens.contains(it.value.idTokenA) && tokens.contains(it.value.idTokenB) }
         .key
 }
