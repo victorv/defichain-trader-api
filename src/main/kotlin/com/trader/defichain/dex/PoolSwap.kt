@@ -3,7 +3,7 @@ package com.trader.defichain.dex
 import kotlinx.serialization.Serializable
 
 fun testPoolSwap(poolSwap: AbstractPoolSwap): SwapResult {
-    return executeSwaps(listOf(poolSwap), getPools(), true).swapResults.first()
+    return executeSwaps(listOf(poolSwap), getActivePools(), true).swapResults.first()
 }
 
 interface AbstractPoolSwap {

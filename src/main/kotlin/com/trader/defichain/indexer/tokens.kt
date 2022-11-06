@@ -2,7 +2,7 @@ package com.trader.defichain.indexer
 
 import com.trader.defichain.db.DBTX
 import com.trader.defichain.db.insertTokens
-import com.trader.defichain.dex.getPools
+import com.trader.defichain.dex.getAllPools
 import com.trader.defichain.dex.getTokens
 import org.slf4j.LoggerFactory
 
@@ -41,7 +41,7 @@ fun DBTX.indexTokens() {
 
     allTokenSymbolsByTokenID.putAll(tokensByID.entries.associate { it.key to it.value.symbol })
 
-    for ((poolID, pool) in getPools()) {
+    for ((poolID, pool) in getAllPools()) {
         putPoolTokenIDBySymbol(poolID)
         putPoolTokenIDBySymbol(pool.idTokenA)
         putPoolTokenIDBySymbol(pool.idTokenB)

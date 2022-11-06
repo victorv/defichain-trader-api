@@ -268,8 +268,8 @@ object DB {
         return results
     }
 
-    inline fun selectAllRecords(query: String): MutableList<JsonObject> {
-        val results = ArrayList<JsonObject>()
+    inline fun selectAllRecords(query: String): MutableList<JsonElement> {
+        val results = ArrayList<JsonElement>()
         connectionPool.connection.use {
 
             it.prepareStatement(query).use { statement ->
@@ -556,7 +556,7 @@ object DB {
         var sql = template.replace(":period", period.toString())
         sql = sql.replace(":token_from", toIsAny("token_from", tokensFrom))
         sql = sql.replace(":token_to", toIsAny("token_to", tokensTo))
-        return selectAllRecords(sql)
+        return selectAllRecords(sql).map { it.jsonObject }
     }
 
     private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {

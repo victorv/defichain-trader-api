@@ -114,7 +114,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                                 desiredResult = 1.0,
                             )
 
-                            val pools = getPools()
+                            val pools = getActivePools()
                             val estimate = executeSwaps(listOf(graphSwap), pools, false).swapResults[0].estimate
                             val secondEstimate =
                                 executeSwaps(listOf(mempoolSwap, graphSwap), pools, false).swapResults[1].estimate
