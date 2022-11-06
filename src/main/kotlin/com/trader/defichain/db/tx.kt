@@ -17,7 +17,7 @@ ON CONFLICT (tx_row_id) DO NOTHING
 
 private const val template_insertMintedTX = """
 INSERT INTO minted_tx (tx_row_id, block_height, txn) VALUES (?, ?, ?)
-ON CONFLICT (tx_row_id) DO UPDATE SET tx_row_id = minted_tx.tx_row_id
+ON CONFLICT DO NOTHING
 """
 
 private const val template_insertTXType = """
