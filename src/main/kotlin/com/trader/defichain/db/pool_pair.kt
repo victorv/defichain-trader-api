@@ -3,6 +3,7 @@ package com.trader.defichain.db
 import com.trader.defichain.dex.PoolPair
 import com.trader.defichain.indexer.indexTokens
 import com.trader.defichain.rpc.Block
+import com.trader.defichain.util.Future
 
 private val template_insertPoolPair = """
 INSERT INTO pool_pair (reserve_a, reserve_b, token, block_height) 
@@ -56,8 +57,8 @@ fun updateOraclePrice(tokenID: Int, oraclePrice: Double): Boolean {
     return true
 }
 
-fun DBTX.insertPoolPairs(block: Block, poolPairs: Map<Int, PoolPair>, oraclePrices: Map<Int, Double>) {
-    insertBlock(block, false)
+fun DBTX.insertPoolPairs(block: Block, masterNode: Future<Long>, poolPairs: Map<Int, PoolPair>, oraclePrices: Map<Int, Double>) {
+    insertBlock(block, masterNode, false)
 
     doLater {
         indexTokens()

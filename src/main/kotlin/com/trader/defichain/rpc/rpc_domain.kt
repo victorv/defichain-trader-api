@@ -2,6 +2,7 @@ package com.trader.defichain.rpc
 
 import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonPrimitive
+import java.math.BigDecimal
 
 @kotlinx.serialization.Serializable
 data class Token(
@@ -42,10 +43,17 @@ data class Block(
     val medianTime: Long,
     @JsonNames("previousblockhash")
     val previousBlockHash: String? = null,
+    val minter: String,
+    @JsonNames("masternode")
+    val masterNode: String,
 ) {
     init {
         tx.forEachIndexed { txn, tx -> tx.txn = txn }
     }
+}
+
+data class MasterNodeTX(val tx: TX, val fee: BigDecimal) {
+    val type = "CreateMasterNode"
 }
 
 enum class RPCMethod(val id: String) {

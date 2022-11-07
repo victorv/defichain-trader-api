@@ -6,8 +6,8 @@ import com.trader.defichain.util.Future
 import java.math.BigDecimal
 
 private const val template_insertBlock = """
-INSERT INTO block (height, time, hash, finalized) VALUES (?, ?, ?, ?)
-ON CONFLICT (height) DO UPDATE SET time = ?, finalized = ?
+INSERT INTO block (height, time, hash, finalized, master_node, minter) VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (height) DO UPDATE SET time = ?, finalized = ?, master_node = ?, minter = ?
 """
 
 private const val template_insertMempoolTX = """
@@ -35,14 +35,21 @@ valid = ?
 RETURNING row_id;
 """
 
-fun DBTX.insertBlock(block: Block, finalized: Boolean) = doLater {
+fun DBTX.insertBlock(block: Block, masterNode: Future<Long>, finalized: Boolean) = doLater {
+    val minter = insertAddress(block.minter)
+
     connection.prepareStatement(template_insertBlock).use {
         it.setInt(1, block.height)
         it.setLong(2, block.medianTime)
         it.setString(3, block.hash)
         it.setBoolean(4, finalized)
-        it.setLong(5, block.medianTime)
-        it.setBoolean(6, finalized)
+        it.setLong(5, masterNode.get())
+        it.setLong(6, minter)
+
+        it.setLong(7, block.medianTime)
+        it.setBoolean(8, finalized)
+        it.setLong(9, masterNode.get())
+        it.setLong(10, minter)
         insertOrDoNothing(it)
     }
 }

@@ -1,6 +1,5 @@
 package com.trader.defichain.indexer
 
-import com.trader.defichain.db.auctionBid
 import com.trader.defichain.db.*
 import com.trader.defichain.dex.getPool
 import com.trader.defichain.dex.getPoolID
@@ -105,7 +104,10 @@ private suspend fun indexZMQBatches(
 }
 
 private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
-    dbTX.insertBlock(zmqBatch.block, true)
+    val masterNodeTX = RPC.getMasterNodeTX(zmqBatch.block.masterNode)
+    val masterNode =
+        dbTX.insertTX(masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, isConfirmed = true, valid = true)
+    dbTX.insertBlock(zmqBatch.block, masterNode, true)
 
     for (zmqPair in zmqBatch.tx) {
         try {
