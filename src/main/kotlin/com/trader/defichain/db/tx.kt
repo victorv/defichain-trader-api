@@ -3,7 +3,11 @@ package com.trader.defichain.db
 import com.trader.defichain.indexer.ZMQRawTX
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.util.Future
+import com.trader.defichain.util.floor
+import com.trader.defichain.util.up
 import java.math.BigDecimal
+
+private val fi = BigDecimal(100000000)
 
 private const val template_insertBlock = """
 INSERT INTO block (height, time, hash, finalized, master_node, minter) VALUES (?, ?, ?, ?, ?, ?)
@@ -27,9 +31,11 @@ RETURNING row_id;
 """
 
 private const val template_insertTX = """
-INSERT INTO tx (dc_tx_id, tx_type_row_id, fee, confirmed, valid) VALUES (?, ?, ?, ?, ?)
+INSERT INTO tx (dc_tx_id, tx_type_row_id, fee, size, fee_rate, confirmed, valid) VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (dc_tx_id) DO UPDATE SET 
 fee = ?,
+size = ?,
+fee_rate = ?,
 confirmed = ?,
 valid = ?
 RETURNING row_id;
@@ -73,8 +79,9 @@ fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater 
     }
 }
 
-fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, isConfirmed: Boolean, valid: Boolean): Future<Long> {
+fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, size: Int, isConfirmed: Boolean, valid: Boolean): Future<Long> {
     val rowID = Future<Long>()
+    val feeRate = (fee * fi / BigDecimal(size)).up()
 
     doLater {
         val txTypeRowID = insertTransactionType(txType)
@@ -83,12 +90,16 @@ fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, isConfirmed: Bo
             it.setString(1, txID)
             it.setInt(2, txTypeRowID)
             it.setBigDecimal(3, fee)
-            it.setBoolean(4, isConfirmed)
-            it.setBoolean(5, valid)
+            it.setInt(4, size)
+            it.setDouble(5, feeRate)
+            it.setBoolean(6, isConfirmed)
+            it.setBoolean(7, valid)
 
-            it.setBigDecimal(6, fee)
-            it.setBoolean(7, isConfirmed)
-            it.setBoolean(8, valid)
+            it.setBigDecimal(8, fee)
+            it.setInt(9, size)
+            it.setDouble(10, feeRate)
+            it.setBoolean(11, isConfirmed)
+            it.setBoolean(12, valid)
             rowID.set(upsertReturning(it))
         }
     }

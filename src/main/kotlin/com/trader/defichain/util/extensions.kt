@@ -8,6 +8,8 @@ fun ByteArray.toHex2(): String =
 
 fun BigDecimal.floor() = this.setScale(8, RoundingMode.FLOOR).toDouble()
 
+fun BigDecimal.up() = this.setScale(8, RoundingMode.UP).toDouble()
+
 fun BigDecimal.floorPlain(): String = this.setScale(8, RoundingMode.FLOOR).toPlainString()
 
 fun <T> List<T>.containsSwapPath(other: List<T>): Boolean {
