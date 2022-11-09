@@ -202,7 +202,8 @@ mempool.block_height,
 mempool.time,
 mempool.txn,
 tta.dc_token_symbol,
-tx.row_id
+tx.row_id,
+block.time
 from pool_swap
 inner join swaps on swaps.tx_row_id = pool_swap.tx_row_id
 inner join token tf on tf.dc_token_id=token_from 
@@ -211,7 +212,8 @@ inner join token tta on tta.dc_token_id=token_to_alt
 inner join address af on af.row_id = "from"
 inner join address at on at.row_id = "to"
 inner join tx on tx.row_id = pool_swap.tx_row_id
-left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
+left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id
+left join block on block.height = minted_tx.block_height 
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
@@ -564,6 +566,7 @@ object DB {
         val blockEntry = if (blockHeight == null) null else BlockEntry(
             blockHeight = blockHeight as Int,
             txn = resultSet.getInt(3),
+            medianTime = resultSet.getLong(17),
         )
 
         val blockHeightMempool = resultSet.getObject(12)
@@ -607,6 +610,7 @@ object DB {
     data class BlockEntry(
         val blockHeight: Int,
         val txn: Int,
+        val medianTime: Long,
     )
 
     @kotlinx.serialization.Serializable
