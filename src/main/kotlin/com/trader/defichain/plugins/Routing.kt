@@ -2,6 +2,7 @@ package com.trader.defichain.plugins
 
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.DB
+import com.trader.defichain.db.getMetrics
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
 import io.ktor.http.*
@@ -91,7 +92,7 @@ fun Application.configureRouting() {
         }
         get("/graph") {
             val poolSwap = extractPoolSwap(call) ?: return@get
-            val metrics = DB.getMetrics(poolSwap)
+            val metrics = getMetrics(poolSwap)
             call.respond(metrics)
         }
         get("/poolpairs") {
