@@ -2,6 +2,7 @@ package com.trader.defichain.db
 
 import com.trader.defichain.dex.*
 import com.trader.defichain.util.get
+import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
 import kotlin.math.abs
 import kotlin.math.min
@@ -25,7 +26,7 @@ inner join fee on fee.token = pool_pair.token
  (select coalesce(max(fee.block_height), (select min(block_height) from fee where fee.token = pool_pair.token))
  from fee where fee.token = pool_pair.token AND fee.block_height <= pool_pair.block_height)
 inner join block on pool_pair.block_height = block.height
-where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(?)
+where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(:pool_ids)
 order by pool_pair.block_height DESC     
 """.trimIndent()
 
@@ -40,8 +41,12 @@ fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
     connectionPool.connection.use { connection ->
         val poolIDArray = connection.createArrayOf("INT", uniquePoolIdentifiers)
 
-        connection.prepareStatement(template_poolPairs).use { statement ->
-            statement.setArray(1, poolIDArray)
+        val params = mapOf<String, Any>(
+            "pool_ids" to poolIDArray
+        )
+
+        connection.prepareStatement(template_poolPairs, params).use { statement ->
+
             statement.executeQuery().use { resultSet ->
                 while (resultSet.next()) {
                     val poolID = resultSet.getInt("pool_id")

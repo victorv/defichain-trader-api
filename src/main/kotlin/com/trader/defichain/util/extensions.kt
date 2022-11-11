@@ -2,7 +2,11 @@ package com.trader.defichain.util
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.sql.Connection
+import java.sql.PreparedStatement
 import java.sql.ResultSet
+
+private val placeholder = ":[a-z]+(_[a-z]+)*".toRegex()
 
 private fun getColumnIndexForLabel(resultSet: ResultSet, columnLabel: String): Int {
     for (i in 1..resultSet.metaData.columnCount) {
@@ -18,6 +22,26 @@ fun <T> ResultSet.get(columnLabel: String): T {
         return value.toDouble() as T
     }
     return value as T
+}
+fun Connection.prepareStatement(sql: String, parameters: Map<String, Any>): PreparedStatement {
+    val placeholders = placeholder.findAll(sql)
+        .mapIndexed { index, match -> Pair(index + 1, match.value) }
+        .associateWith { parameters.getValue(it.second.substring(1)) }
+
+    val sqlNativePlaceholders = placeholder.replace(sql, "?")
+    val statement = this.prepareStatement(sqlNativePlaceholders)
+    try {
+        for ((placeholder, value) in placeholders) {
+            statement.setObject(placeholder.first, value)
+        }
+    } catch (e: Throwable) {
+        try {
+            statement.close()
+        } finally {
+            throw e
+        }
+    }
+    return statement
 }
 
 fun ByteArray.toHex2(): String =
