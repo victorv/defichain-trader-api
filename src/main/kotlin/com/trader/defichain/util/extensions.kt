@@ -2,6 +2,23 @@ package com.trader.defichain.util
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.sql.ResultSet
+
+private fun getColumnIndexForLabel(resultSet: ResultSet, columnLabel: String): Int {
+    for (i in 1..resultSet.metaData.columnCount) {
+        val labelAtIndex = resultSet.metaData.getColumnLabel(i)
+        if (columnLabel == labelAtIndex) return i
+    }
+    throw IllegalArgumentException("Unable to find column with label: $columnLabel")
+}
+fun <T> ResultSet.get(columnLabel: String): T {
+    val columnIndex = getColumnIndexForLabel(this, columnLabel)
+    val value = this.getObject(columnIndex)
+    if (value is BigDecimal) {
+        return value.toDouble() as T
+    }
+    return value as T
+}
 
 fun ByteArray.toHex2(): String =
     asUByteArray().joinToString("") { it.toString(radix = 16).padStart(2, '0') }

@@ -1,6 +1,7 @@
 package com.trader.defichain.db
 
 import com.trader.defichain.dex.*
+import com.trader.defichain.util.get
 import org.intellij.lang.annotations.Language
 import kotlin.math.abs
 import kotlin.math.min
@@ -10,14 +11,14 @@ private val template_poolPairs = """
 select 
 reserve_a, 
 reserve_b, 
-pool_pair.token, 
+pool_pair.token as "pool_id", 
 pool_pair.block_height,
 in_a,
 out_a,
 in_b,
 out_b,
 commission,
-block.time
+block.time as "block_time"
 from pool_pair
 inner join fee on fee.token = pool_pair.token
  AND fee.block_height = 
@@ -43,10 +44,10 @@ fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
             statement.setArray(1, poolIDArray)
             statement.executeQuery().use { resultSet ->
                 while (resultSet.next()) {
-                    val poolID = resultSet.getInt(3)
+                    val poolID = resultSet.getInt("pool_id")
 
-                    val blockHeight = resultSet.getInt(4)
-                    blockTimes[blockHeight] = resultSet.getLong(10)
+                    val blockHeight = resultSet.getInt("block_height")
+                    blockTimes[blockHeight] = resultSet.getLong("block_time")
                     minBlockHeight = min(blockHeight, minBlockHeight)
                     maxBlockHeight = Integer.max(blockHeight, maxBlockHeight)
 
@@ -57,13 +58,13 @@ fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
                         idTokenB = poolPair.idTokenB,
                         status = poolPair.status,
                         tradeEnabled = poolPair.tradeEnabled,
-                        reserveA = resultSet.getDouble(1),
-                        reserveB = resultSet.getDouble(2),
-                        dexFeeInPctTokenA = resultSet.getDouble(5),
-                        dexFeeOutPctTokenA = resultSet.getDouble(6),
-                        dexFeeInPctTokenB = resultSet.getDouble(7),
-                        dexFeeOutPctTokenB = resultSet.getDouble(8),
-                        commission = resultSet.getDouble(9),
+                        reserveA = resultSet.get("reserve_a"),
+                        reserveB = resultSet.get("reserve_b"),
+                        dexFeeInPctTokenA = resultSet.get("in_a"),
+                        dexFeeOutPctTokenA = resultSet.get("out_a"),
+                        dexFeeInPctTokenB = resultSet.get("in_b"),
+                        dexFeeOutPctTokenB = resultSet.get("out_b"),
+                        commission = resultSet.getDouble("commission"),
                     )
 
                     var poolPairsAtHeight = poolPairUpdates[blockHeight]
