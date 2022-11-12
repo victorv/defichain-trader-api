@@ -7,6 +7,8 @@ import org.intellij.lang.annotations.Language
 import kotlin.math.abs
 import kotlin.math.min
 
+private const val oneWeek = 2880 * 7
+
 @Language("sql")
 private val template_poolPairs = """
 select 
@@ -26,11 +28,11 @@ inner join fee on fee.token = pool_pair.token
  (select coalesce(max(fee.block_height), (select min(block_height) from fee where fee.token = pool_pair.token))
  from fee where fee.token = pool_pair.token AND fee.block_height <= pool_pair.block_height)
 inner join block on pool_pair.block_height = block.height
-where pool_pair.block_height >= (select max(block.height) - (2880 * 7) from block) AND pool_pair.token = ANY(:pool_ids)
+where pool_pair.block_height >= (select max(block.height) - :block_count from block) AND pool_pair.token = ANY(:pool_ids)
 order by pool_pair.block_height DESC     
 """.trimIndent()
 
-fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
+fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> {
     val poolPairUpdates = mutableMapOf<Int, MutableMap<Int, PoolPair>>()
     val uniquePoolIdentifiers = getSwapPaths(poolSwap).flatten().toSet().toTypedArray()
 
@@ -42,7 +44,8 @@ fun getMetrics(poolSwap: AbstractPoolSwap): List<List<Double>> {
         val poolIDArray = connection.createArrayOf("INT", uniquePoolIdentifiers)
 
         val params = mapOf<String, Any>(
-            "pool_ids" to poolIDArray
+            "pool_ids" to poolIDArray,
+            "block_count" to oneWeek.coerceAtMost(blockCount)
         )
 
         connection.prepareStatement(template_poolPairs, params).use { statement ->
