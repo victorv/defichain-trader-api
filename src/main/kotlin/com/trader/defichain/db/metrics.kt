@@ -4,7 +4,6 @@ import com.trader.defichain.dex.*
 import com.trader.defichain.util.get
 import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
-import kotlin.math.abs
 import kotlin.math.min
 
 private const val oneWeek = 2880 * 7
@@ -105,7 +104,7 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
         minBlockHeight++
     }
 
-    val metrics = ArrayList<List<Double>>()
+    val metrics = ArrayList<List<Double>>(600)
     var previousEstimate = 0.0
     for (height in minBlockHeight..maxBlockHeight) {
         val poolPairsAtHeight = poolPairUpdates[height] ?: continue
@@ -114,7 +113,9 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
         }
 
         val estimate = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().estimate
-        if (abs(estimate - previousEstimate) < estimate * 0.0001) continue
+        if (estimate == previousEstimate) {
+            continue
+        }
 
         metrics.add(
             listOf(
@@ -126,5 +127,17 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
         previousEstimate = estimate
     }
 
-    return metrics
+    val maxMetrics = 600
+    val halveMaxMetrics = maxMetrics / 2 - 1
+    if (metrics.size <= maxMetrics) {
+        return metrics
+    }
+
+    metrics.sortBy { it[1] }
+
+    val lastIndex = metrics.size - 1
+    return listOf(metrics.first()) +
+            metrics.subList(1, halveMaxMetrics) +
+            metrics.subList(lastIndex - 1 - halveMaxMetrics, lastIndex - 1) +
+            listOf(metrics.last())
 }
