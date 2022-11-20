@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
+import java.math.BigDecimal
 import java.time.Instant
 import kotlin.coroutines.CoroutineContext
 
@@ -47,8 +48,10 @@ private suspend fun processEvent(event: ZMQEvent) {
             if(poolPairs != null && oraclePrices != null) {
                 val dbtx = DBTX("Tokens, pool pairs and oracle prices at block height ${newBlock.height}")
                 val masterNodeTX = RPC.getMasterNodeTX(newBlock.masterNode)
-                val masterNode = dbtx.insertTX(masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, masterNodeTX.size,
-                    isConfirmed = true, valid = true)
+                val masterNode = dbtx.insertTX(
+                    masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, masterNodeTX.size,
+                    isConfirmed = true, valid = true
+                )
                 dbtx.insertPoolPairs(newBlock, masterNode, poolPairs, oraclePrices)
                 dbtx.submit()
             }

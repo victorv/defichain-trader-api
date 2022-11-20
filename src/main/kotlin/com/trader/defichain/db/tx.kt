@@ -42,7 +42,7 @@ RETURNING row_id;
 """
 
 fun DBTX.insertBlock(block: Block, masterNode: Future<Long>, finalized: Boolean) = doLater {
-    val minter = insertAddress(block.minter)
+    val minter = insertAddress(block.minter ?: "placeholderaddress")
 
     connection.prepareStatement(template_insertBlock).use {
         it.setInt(1, block.height)
