@@ -4,9 +4,16 @@ import com.trader.defichain.dex.*
 import com.trader.defichain.util.get
 import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
+import java.time.*
+import kotlin.math.max
 import kotlin.math.min
 
-private const val oneWeek = 2880 * 7
+private val UTC = ZoneId.of("UTC")
+
+private const val oneHour = 120
+private const val oneDay = oneHour * 24
+private const val fiveDays = oneDay * 5
+private const val oneMonth = oneDay * 31
 
 @Language("sql")
 private val template_poolPairs = """
@@ -44,7 +51,7 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
 
         val params = mapOf<String, Any>(
             "pool_ids" to poolIDArray,
-            "block_count" to oneWeek.coerceAtMost(blockCount)
+            "block_count" to oneMonth.coerceAtMost(blockCount)
         )
 
         connection.prepareStatement(template_poolPairs, params).use { statement ->
@@ -104,40 +111,72 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
         minBlockHeight++
     }
 
-    val metrics = ArrayList<List<Double>>(600)
-    var previousEstimate = 0.0
+    val byTime = HashMap<Long, CandleStick>()
     for (height in minBlockHeight..maxBlockHeight) {
+
+
         val poolPairsAtHeight = poolPairUpdates[height] ?: continue
         for ((poolID, poolPair) in poolPairsAtHeight) {
             poolPairs[poolID] = poolPair
         }
 
         val estimate = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().estimate
-        if (estimate == previousEstimate) {
-            continue
-        }
 
-        metrics.add(
-            listOf(
-                height.toDouble(),
-                estimate,
-                blockTimes.getValue(height).toDouble()
+        val time = blockTimes.getValue(height)
+        val roundedTime = roundToFitTimeline(time, blockCount)
+        val current = byTime[roundedTime]
+        if (current == null) {
+            byTime[roundedTime] = CandleStick(
+                o = estimate,
+                l = estimate,
+                c = estimate,
+                h = estimate,
+                blockHeight = height,
+                time = roundedTime,
+                roundedTime = roundedTime
             )
-        )
-        previousEstimate = estimate
+        } else {
+            val o = if (time > current.time) estimate else current.o
+            val c = if (time < current.time) estimate else current.c
+            val l = min(current.l, estimate)
+            val h = max(current.h, estimate)
+            byTime[roundedTime] = CandleStick(
+                o = o,
+                c = c,
+                l = l,
+                h = h,
+                blockHeight = height,
+                time = time,
+                roundedTime = roundedTime
+            )
+        }
     }
-
-    val maxMetrics = 600
-    val halveMaxMetrics = maxMetrics / 2 - 1
-    if (metrics.size <= maxMetrics) {
-        return metrics
+    return byTime.values.sortedBy { it.roundedTime }.map {
+        listOf(it.o, it.c, it.l, it.h, it.roundedTime.toDouble(), it.blockHeight.toDouble())
     }
-
-    metrics.sortBy { it[1] }
-
-    val lastIndex = metrics.size - 1
-    return listOf(metrics.first()) +
-            metrics.subList(1, halveMaxMetrics) +
-            metrics.subList(lastIndex - 1 - halveMaxMetrics, lastIndex - 1) +
-            listOf(metrics.last())
 }
+
+private fun roundToFitTimeline(time: Long, blockCount: Int): Long {
+    val dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(time * 1000), UTC)
+    return when {
+        blockCount <= oneHour -> dateTime
+        blockCount <= fiveDays -> LocalDateTime.of(
+            dateTime.toLocalDate(),
+            LocalTime.of(dateTime.hour, 0)
+        )
+        else -> LocalDateTime.of(
+            dateTime.toLocalDate(),
+            LocalTime.of(0, 0)
+        )
+    }.toInstant(ZoneOffset.UTC).toEpochMilli()
+}
+
+data class CandleStick(
+    val o: Double,
+    val c: Double,
+    val h: Double,
+    val l: Double,
+    val time: Long,
+    val blockHeight: Int,
+    val roundedTime: Long,
+)
