@@ -1,6 +1,7 @@
 package com.trader.defichain.rpc
 
 import com.trader.defichain.config.rpcConfig
+import com.trader.defichain.db.insertTX
 import com.trader.defichain.dex.PoolPair
 import com.trader.defichain.indexer.calculateFee
 import com.trader.defichain.plugins.getHttpClientEngine
@@ -16,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import java.io.IOException
+import java.math.BigDecimal
 
 const val dummyAddress = "dLXs788fWMpGoar1WzDnLoNCNYyZVPPozv"
 
@@ -83,7 +85,18 @@ class RPC {
         suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? =
             asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
 
-        suspend fun getMasterNodeTX(txID: String): MasterNodeTX {
+        suspend fun getMasterNodeTX(txID: String?): MasterNodeTX {
+            if (txID == null) {
+                return MasterNodeTX(
+                    TX(
+                        txID = "placeholdertx",
+                        vin = listOf(),
+                        vout = listOf(),
+                        size = 100,
+                    ), BigDecimal(1.0)
+                )
+            }
+
             if (masterNodeTransactions.containsKey(txID)) return masterNodeTransactions.getValue(txID)
 
             val tx = getValue<TX>(RPCMethod.GET_RAW_TRANSACTION, JsonPrimitive(txID), JsonPrimitive(true))

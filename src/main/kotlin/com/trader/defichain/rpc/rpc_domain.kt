@@ -43,9 +43,9 @@ data class Block(
     val medianTime: Long,
     @JsonNames("previousblockhash")
     val previousBlockHash: String? = null,
-    val minter: String,
+    val minter: String? = null,
     @JsonNames("masternode")
-    val masterNode: String,
+    val masterNode: String? = null,
 ) {
     init {
         tx.forEachIndexed { txn, tx -> tx.txn = txn }
