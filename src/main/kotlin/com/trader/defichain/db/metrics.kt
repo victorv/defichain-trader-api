@@ -132,21 +132,23 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
                 c = estimate,
                 h = estimate,
                 blockHeight = height,
-                time = roundedTime,
+                minTime = time,
+                maxTime = time,
                 roundedTime = roundedTime
             )
         } else {
-            val o = if (time > current.time) estimate else current.o
-            val c = if (time < current.time) estimate else current.c
+            val o = if (time < current.minTime) estimate else current.o
+            val c = if (time > current.maxTime) estimate else current.c
             val l = min(current.l, estimate)
             val h = max(current.h, estimate)
             byTime[roundedTime] = CandleStick(
                 o = o,
                 c = c,
-                l = l,
                 h = h,
+                l = l,
                 blockHeight = height,
-                time = time,
+                minTime = min(time, current.minTime),
+                maxTime = max(time, current.maxTime),
                 roundedTime = roundedTime
             )
         }
@@ -176,7 +178,8 @@ data class CandleStick(
     val c: Double,
     val h: Double,
     val l: Double,
-    val time: Long,
     val blockHeight: Int,
     val roundedTime: Long,
+    val maxTime: Long,
+    val minTime: Long,
 )
