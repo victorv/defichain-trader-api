@@ -533,6 +533,19 @@ object DB {
 
     @kotlinx.serialization.Serializable
     data class PoolHistoryFilter(
+        val txID: String? = null,
+        val minBlock: Int? = null,
+        val maxBlock: Int? = null,
+        val minInputAmount: Double? = null,
+        val maxInputAmount: Double? = null,
+        val minOutputAmount: Double? = null,
+        val maxOutputAmount: Double? = null,
+        val minFee: Double? = null,
+        val maxFee: Double? = null,
+        val fromAddressGroup: List<String>? = null,
+        val fromAddress: String? = null,
+        val toAddressGroup: List<String>? = null,
+        val toAddress: String? = null,
         val fromTokenSymbol: String? = null,
         val toTokenSymbol: String? = null,
         val filterString: String? = null,
