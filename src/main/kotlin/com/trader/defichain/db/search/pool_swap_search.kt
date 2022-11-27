@@ -122,12 +122,8 @@ fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
             "blacklisted" to SQLValue(blacklistArray, Types.ARRAY),
         )
 
-        val sql =
-            if (!filter.confirmed) template_selectPoolSwaps.replace("minted_tx m", "mempool m")
-            else template_selectPoolSwaps
-
         val poolSwaps = ArrayList<PoolSwapRow>()
-        connection.prepareStatement(sql, parameters).use { statement ->
+        connection.prepareStatement(template_selectPoolSwaps, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
 
                 while (resultSet.next()) {
@@ -249,8 +245,6 @@ data class PoolHistoryFilter(
     val toTokenSymbol: String? = null,
     val pager: Pager? = null,
 ) {
-    val confirmed: Boolean = true
-
     companion object {
 
         val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
