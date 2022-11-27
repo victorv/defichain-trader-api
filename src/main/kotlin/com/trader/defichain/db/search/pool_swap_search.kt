@@ -118,7 +118,7 @@ left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 
 fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
     connectionPool.connection.use { connection ->
-        var pagerBlockHeight: Long? = null
+        var pagerBlockHeight: Int? = null
         var blacklist = arrayOf<Long>(-1)
         if (filter.pager != null) {
             pagerBlockHeight = filter.pager.maxBlockHeight
@@ -256,7 +256,7 @@ data class PoolSwapRow(
 
 @kotlinx.serialization.Serializable
 data class Pager(
-    val maxBlockHeight: Long,
+    val maxBlockHeight: Int,
     val blacklist: List<Long>,
 )
 
