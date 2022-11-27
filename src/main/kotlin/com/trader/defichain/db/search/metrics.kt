@@ -1,5 +1,6 @@
-package com.trader.defichain.db
+package com.trader.defichain.db.search
 
+import com.trader.defichain.db.connectionPool
 import com.trader.defichain.dex.*
 import com.trader.defichain.util.get
 import com.trader.defichain.util.prepareStatement
