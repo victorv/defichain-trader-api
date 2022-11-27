@@ -1,18 +1,11 @@
 package com.trader.defichain.db
 
-import com.trader.defichain.dex.*
-import com.trader.defichain.util.floorPlain
 import kotlinx.serialization.json.*
 import org.intellij.lang.annotations.Language
 import org.postgresql.ds.PGSimpleDataSource
-import java.lang.Integer.max
 import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.PreparedStatement
-import java.sql.ResultSet
-import java.sql.Types
-import kotlin.math.abs
-import kotlin.math.min
 
 @Language("sql")
 private val template_boughtSoldByAddress = """
@@ -231,8 +224,12 @@ object DB {
 
     fun selectTransactionRowID(
         connection: Connection,
-        txID: String,
+        txID: String?,
     ): Long? {
+        if (txID == null) {
+            return null
+        }
+
         val sql = "select row_id from tx where dc_tx_id = ?"
         connection.prepareStatement(sql).use { statement ->
             statement.setString(1, txID)
@@ -243,15 +240,45 @@ object DB {
         }
     }
 
+    fun selectAddresses(
+        connection: Connection,
+        addresses: List<String>?,
+    ): java.sql.Array? {
+        if (addresses == null || addresses.isEmpty()) {
+            return null
+        }
+
+        val addressIdentifiers = ArrayList<Long>()
+        val addressArray = connection.createArrayOf("VARCHAR", addresses.toTypedArray())
+        val sql = "select row_id from address where dc_address = ANY(?)"
+        connection.prepareStatement(sql).use { statement ->
+            statement.setArray(1, addressArray)
+            statement.executeQuery().use { resultSet ->
+                while (resultSet.next()) {
+                    addressIdentifiers.add(resultSet.getLong(1))
+                }
+            }
+        }
+        if(addressIdentifiers.isEmpty()) {
+            return null
+        }
+
+        return connection.createArrayOf("BIGINT", addressIdentifiers.toTypedArray())
+    }
+
     fun selectAddressRowID(
         connection: Connection,
-        address: String,
+        address: String?,
     ): Long? {
+        if (address == null) {
+            return null
+        }
+
         val sql = "select row_id from address where dc_address = ?"
         connection.prepareStatement(sql).use { statement ->
             statement.setString(1, address)
             statement.executeQuery().use { resultSet ->
-                if (!resultSet.next()) return null
+                if (!resultSet.next()) return -1
                 return resultSet.getLong(1)
             }
         }
@@ -259,8 +286,12 @@ object DB {
 
     fun selectTokenID(
         connection: Connection,
-        tokenSymbol: String,
+        tokenSymbol: String?,
     ): Int? {
+        if (tokenSymbol == null) {
+            return null
+        }
+
         val sql = "select dc_token_id from token where dc_token_symbol = ?"
         connection.prepareStatement(sql).use { statement ->
             statement.setString(1, tokenSymbol)

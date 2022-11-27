@@ -3,28 +3,50 @@ package com.trader.defichain.db.search
 import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
 import com.trader.defichain.dex.getOraclePriceForSymbol
+import com.trader.defichain.util.SQLValue
 import com.trader.defichain.util.floorPlain
+import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
 import java.sql.ResultSet
 import java.sql.Types
 
 @Language("sql")
 private val template_selectPoolSwaps = """
-with minted_swap as (
+with latest_oracle as (
+select token, max(block_height) as block_height from oracle_price group by token
+),
+latest_oracle_price as (
+select oracle_price.token, oracle_price.price from oracle_price 
+inner join latest_oracle lo on lo.token=oracle_price.token AND lo.block_height=oracle_price.block_height
+),    
+minted_swap as (
  select 
  pool_swap.tx_row_id,
  block_height,
  txn
  from pool_swap
- inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id 
+ inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id
+ inner join tx on pool_swap.tx_row_id = tx.row_id
+ inner join latest_oracle_price fop on fop.token = token_from
+ inner join latest_oracle_price top on top.token = token_to
  where 
-  (? IS NULL or block_height <= ?) AND
-  pool_swap.tx_row_id <> ANY(?) AND
-  (? IS NULL or token_from = ?) AND
-  (? IS NULL or token_to = ?) AND 
-  (? IS NULL or ("from" = ? or "to" = ?)) AND
-  (? IS NULL or block_height = ?) AND
-  (? IS NULL or pool_swap.tx_row_id = ?)
+  (:pager_block_height IS NULL or block_height <= :pager_block_height) AND
+  pool_swap.tx_row_id <> ANY(:blacklisted) AND
+  (:min_block_height IS NULL or block_height >= :min_block_height) AND
+  (:max_block_height IS NULL or block_height <= :max_block_height) AND
+  (:min_fee IS NULL or fee >= :min_fee) AND
+  (:max_fee IS NULL or fee <= :max_fee) AND
+  (:min_input_amount IS NULL or amount_from * fop.price >= :min_input_amount) AND
+  (:max_input_amount IS NULL or amount_from * fop.price <= :max_input_amount) AND
+  (:min_output_amount IS NULL or amount_to * top.price >= :min_output_amount) AND
+  (:max_output_amount IS NULL or amount_to * top.price <= :max_output_amount) AND
+  (:token_from IS NULL or token_from = :token_from) AND
+  (:token_to IS NULL or token_to = :token_to) AND
+  (:from_address IS NULL or "from" = :from_address) AND
+  (:from_address_whitelist_is_null = true or "from" = ANY(:from_address_whitelist)) AND
+  (:to_address IS NULL or "to" = :to_address) AND
+  (:to_address_whitelist_is_null = true or "to" = ANY(:to_address_whitelist)) AND
+  (:tx_id IS NULL or pool_swap.tx_row_id = :tx_id)
  order by minted_tx.block_height DESC, minted_tx.txn
  limit 26 offset 0
 ),
@@ -35,15 +57,27 @@ mempool_swap as (
  -1
  from pool_swap
  inner join mempool on mempool.tx_row_id = pool_swap.tx_row_id
+ inner join tx on pool_swap.tx_row_id = tx.row_id
+ inner join latest_oracle_price fop on fop.token = token_from
+ inner join latest_oracle_price top on top.token = token_to
  where
   pool_swap.tx_row_id NOT IN (select tx_row_id from minted_swap) AND
-  (? IS NULL or block_height <= ?) AND
-  pool_swap.tx_row_id <> ANY(?) AND
-  (? IS NULL or token_from = ?) AND
-  (? IS NULL or token_to = ?) AND
-  (? IS NULL or ("from" = ? or "to" = ?)) AND
-  (? IS NULL or block_height = ?) AND
-  (? IS NULL or pool_swap.tx_row_id = ?)
+  pool_swap.tx_row_id <> ANY(:blacklisted) AND
+  (:min_block_height IS NULL or block_height >= :min_block_height) AND
+  (:max_block_height IS NULL or block_height <= :max_block_height) AND
+  (:min_fee IS NULL or fee >= :min_fee) AND
+  (:max_fee IS NULL or fee <= :max_fee) AND
+  (:min_input_amount IS NULL or amount_from * fop.price >= :min_input_amount) AND
+  (:max_input_amount IS NULL or amount_from * fop.price <= :max_input_amount) AND
+  (:min_output_amount IS NULL or amount_to * top.price >= :min_output_amount) AND
+  (:max_output_amount IS NULL or amount_to * top.price <= :max_output_amount) AND
+  (:token_from IS NULL or token_from = :token_from) AND
+  (:token_to IS NULL or token_to = :token_to) AND
+  (:from_address IS NULL or "from" = :from_address) AND
+  (:from_address_whitelist_is_null = true or "from" = ANY(:from_address_whitelist)) AND
+  (:to_address IS NULL or "to" = :to_address) AND
+  (:to_address_whitelist_is_null = true or "to" = ANY(:to_address_whitelist)) AND
+  (:tx_id IS NULL or pool_swap.tx_row_id = :tx_id)
  order by mempool.block_height DESC, mempool.txn
  limit 26
 ),
@@ -81,76 +115,49 @@ left join block on block.height = minted_tx.block_height
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
+
 fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
     connectionPool.connection.use { connection ->
-        var maxBlockHeight: Long? = null
+        var pagerBlockHeight: Long? = null
         var blacklist = arrayOf<Long>(-1)
-        var fromTokenID: Int? = null
-        var toTokenID: Int? = null
-        var addressRowID: Long? = null
-        var blockHeight: Long? = null
-        var txRowID: Long? = null
-
-        if (filter.fromTokenSymbol != null) {
-            fromTokenID = DB.selectTokenID(connection, filter.fromTokenSymbol)
-        }
-
-        if (filter.toTokenSymbol != null) {
-            toTokenID = DB.selectTokenID(connection, filter.toTokenSymbol)
-        }
-
-        val filterString = filter.filterString
-        if (filterString != null) {
-
-            // TODO research if address length can be >= 64
-            if (filterString.length != 64) {
-                addressRowID = DB.selectAddressRowID(connection, filterString)
-            } else {
-                blockHeight = DB.selectBlockHeight(connection, filterString)
-                if (blockHeight == null) {
-                    txRowID = DB.selectTransactionRowID(connection, filterString)
-                }
-            }
-        }
-
         if (filter.pager != null) {
-            maxBlockHeight = filter.pager.maxBlockHeight
+            pagerBlockHeight = filter.pager.maxBlockHeight
             blacklist = filter.pager.blacklist.toTypedArray()
         }
         val blacklistArray = connection.createArrayOf("BIGINT", blacklist)
 
+        val fromTokenID = DB.selectTokenID(connection, filter.fromTokenSymbol)
+        val toTokenID = DB.selectTokenID(connection, filter.toTokenSymbol)
+        val fromAddress = DB.selectAddressRowID(connection, filter.fromAddress)
+        val toAddress = DB.selectAddressRowID(connection, filter.toAddress)
+        val fromAddressWhitelist = DB.selectAddresses(connection, filter.fromAddressGroup)
+        val toAddressWhitelist = DB.selectAddresses(connection, filter.toAddressGroup)
+        val txRowID = DB.selectTransactionRowID(connection, filter.txID)
+
+        val parameters = mapOf(
+            "token_from" to SQLValue(fromTokenID, Types.INTEGER),
+            "token_to" to SQLValue(toTokenID, Types.INTEGER),
+            "from_address" to SQLValue(fromAddress, Types.BIGINT),
+            "to_address" to SQLValue(toAddress, Types.BIGINT),
+            "from_address_whitelist" to SQLValue(fromAddressWhitelist, Types.ARRAY, "BIGINT"),
+            "from_address_whitelist_is_null" to SQLValue(fromAddressWhitelist == null, Types.BOOLEAN),
+            "to_address_whitelist" to SQLValue(toAddressWhitelist, Types.ARRAY, "BIGINT"),
+            "to_address_whitelist_is_null" to SQLValue(toAddressWhitelist == null, Types.BOOLEAN),
+            "min_block_height" to SQLValue(filter.minBlock, Types.INTEGER),
+            "max_block_height" to SQLValue(filter.maxBlock, Types.INTEGER),
+            "min_fee" to SQLValue(filter.minFee, Types.NUMERIC),
+            "max_fee" to SQLValue(filter.maxFee, Types.NUMERIC),
+            "min_input_amount" to SQLValue(filter.minInputAmount, Types.NUMERIC),
+            "max_input_amount" to SQLValue(filter.maxInputAmount, Types.NUMERIC),
+            "min_output_amount" to SQLValue(filter.minOutputAmount, Types.NUMERIC),
+            "max_output_amount" to SQLValue(filter.maxOutputAmount, Types.NUMERIC),
+            "tx_id" to SQLValue(txRowID, Types.BIGINT),
+            "pager_block_height" to SQLValue(pagerBlockHeight, Types.INTEGER),
+            "blacklisted" to SQLValue(blacklistArray, Types.ARRAY),
+        )
+
         val poolSwaps = ArrayList<PoolSwapRow>()
-        connection.prepareStatement(template_selectPoolSwaps).use { statement ->
-            statement.setObject(1, maxBlockHeight, Types.BIGINT)
-            statement.setObject(2, maxBlockHeight, Types.BIGINT)
-            statement.setArray(3, blacklistArray)
-            statement.setObject(4, fromTokenID, Types.INTEGER)
-            statement.setObject(5, fromTokenID, Types.INTEGER)
-            statement.setObject(6, toTokenID, Types.INTEGER)
-            statement.setObject(7, toTokenID, Types.INTEGER)
-            statement.setObject(8, addressRowID, Types.BIGINT)
-            statement.setObject(9, addressRowID, Types.BIGINT)
-            statement.setObject(10, addressRowID, Types.BIGINT)
-            statement.setObject(11, blockHeight, Types.BIGINT)
-            statement.setObject(12, blockHeight, Types.BIGINT)
-            statement.setObject(13, txRowID, Types.BIGINT)
-            statement.setObject(14, txRowID, Types.BIGINT)
-
-            statement.setObject(15, maxBlockHeight, Types.BIGINT)
-            statement.setObject(16, maxBlockHeight, Types.BIGINT)
-            statement.setArray(17, blacklistArray)
-            statement.setObject(18, fromTokenID, Types.INTEGER)
-            statement.setObject(19, fromTokenID, Types.INTEGER)
-            statement.setObject(20, toTokenID, Types.INTEGER)
-            statement.setObject(21, toTokenID, Types.INTEGER)
-            statement.setObject(22, addressRowID, Types.BIGINT)
-            statement.setObject(23, addressRowID, Types.BIGINT)
-            statement.setObject(24, addressRowID, Types.BIGINT)
-            statement.setObject(25, blockHeight, Types.BIGINT)
-            statement.setObject(26, blockHeight, Types.BIGINT)
-            statement.setObject(27, txRowID, Types.BIGINT)
-            statement.setObject(28, txRowID, Types.BIGINT)
-
+        connection.prepareStatement(template_selectPoolSwaps, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
 
                 while (resultSet.next()) {
@@ -270,7 +277,6 @@ data class PoolHistoryFilter(
     val toAddress: String? = null,
     val fromTokenSymbol: String? = null,
     val toTokenSymbol: String? = null,
-    val filterString: String? = null,
     var sort: String? = null,
     val pager: Pager? = null,
 ) {
@@ -298,7 +304,6 @@ data class PoolHistoryFilter(
             sort = sortOptions.getValue(sort!!)
         }
 
-        check(filterString == null || (filterString.length <= 100 && alphaNumeric.matches(filterString)))
         checkTokenSymbol(fromTokenSymbol)
         checkTokenSymbol(toTokenSymbol)
     }

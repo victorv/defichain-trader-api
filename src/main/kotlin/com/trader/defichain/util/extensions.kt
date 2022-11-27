@@ -5,6 +5,7 @@ import java.math.RoundingMode
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
+import java.sql.Types
 
 private val placeholder = ":[a-z]+(_[a-z]+)*".toRegex()
 
@@ -15,6 +16,7 @@ private fun getColumnIndexForLabel(resultSet: ResultSet, columnLabel: String): I
     }
     throw IllegalArgumentException("Unable to find column with label: $columnLabel")
 }
+
 fun <T> ResultSet.get(columnLabel: String): T {
     val columnIndex = getColumnIndexForLabel(this, columnLabel)
     val value = this.getObject(columnIndex)
@@ -23,7 +25,8 @@ fun <T> ResultSet.get(columnLabel: String): T {
     }
     return value as T
 }
-fun Connection.prepareStatement(sql: String, parameters: Map<String, Any>): PreparedStatement {
+
+fun Connection.prepareStatement(sql: String, parameters: Map<String, Any?>): PreparedStatement {
     val placeholders = placeholder.findAll(sql)
         .mapIndexed { index, match -> Pair(index + 1, match.value) }
         .associateWith { parameters.getValue(it.second.substring(1)) }
@@ -32,7 +35,16 @@ fun Connection.prepareStatement(sql: String, parameters: Map<String, Any>): Prep
     val statement = this.prepareStatement(sqlNativePlaceholders)
     try {
         for ((placeholder, value) in placeholders) {
-            statement.setObject(placeholder.first, value)
+            if (value is SQLValue) {
+                if(value.type == Types.ARRAY == value.value == null) {
+                    val array = this.createArrayOf(value.arrayType, arrayOf(-1))
+                    statement.setArray(placeholder.first, array)
+                } else {
+                    statement.setObject(placeholder.first, value.value, value.type)
+                }
+            } else {
+                statement.setObject(placeholder.first, value)
+            }
         }
     } catch (e: Throwable) {
         try {
@@ -68,3 +80,5 @@ fun <T> List<T>.containsSwapPath(other: List<T>): Boolean {
     }
     return true
 }
+
+data class SQLValue(val value: Any?, val type: Int, val arrayType: String? = null)
