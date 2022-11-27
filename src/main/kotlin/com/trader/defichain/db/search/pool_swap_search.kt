@@ -277,20 +277,10 @@ data class PoolHistoryFilter(
     val toAddress: String? = null,
     val fromTokenSymbol: String? = null,
     val toTokenSymbol: String? = null,
-    var sort: String? = null,
     val pager: Pager? = null,
 ) {
     companion object {
 
-        val sortOptions = mapOf(
-            "fee_asc" to "tx.fee ASC",
-            "fee_desc" to "tx.fee DESC",
-            "input_amount_asc" to "pool_swap.amount_from ASC",
-            "input_amount_desc" to "pool_swap.amount_from DESC",
-            "output_amount_asc" to "coalesce(pool_swap.amount_to, 0) ASC",
-            "output_amount_desc" to "coalesce(pool_swap.amount_to, 0) DESC",
-        )
-        val alphaNumeric = "^[a-zA-Z\\d]+$".toRegex()
         val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
     }
 
@@ -300,10 +290,6 @@ data class PoolHistoryFilter(
     }
 
     init {
-        if (sort != null) {
-            sort = sortOptions.getValue(sort!!)
-        }
-
         checkTokenSymbol(fromTokenSymbol)
         checkTokenSymbol(toTokenSymbol)
     }
