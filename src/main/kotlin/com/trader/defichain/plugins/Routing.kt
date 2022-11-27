@@ -2,7 +2,9 @@ package com.trader.defichain.plugins
 
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.DB
-import com.trader.defichain.db.getMetrics
+import com.trader.defichain.db.search.PoolHistoryFilter
+import com.trader.defichain.db.search.getMetrics
+import com.trader.defichain.db.search.getPoolSwaps
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
 import io.ktor.http.*
@@ -114,8 +116,8 @@ fun Application.configureRouting() {
             call.respond(DB.stats(template, period, tokensFrom, tokensTo))
         }
         post("/poolswaps") {
-            val filter = call.receive<DB.PoolHistoryFilter>()
-            val poolSwaps = DB.getPoolSwaps(filter)
+            val filter = call.receive<PoolHistoryFilter>()
+            val poolSwaps = getPoolSwaps(filter)
             call.respond(poolSwaps)
         }
         get("/clear") {

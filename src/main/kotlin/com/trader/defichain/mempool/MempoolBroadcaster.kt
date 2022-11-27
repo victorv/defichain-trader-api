@@ -1,6 +1,7 @@
 package com.trader.defichain.mempool
 
-import com.trader.defichain.db.DB
+import com.trader.defichain.db.search.MempoolEntry
+import com.trader.defichain.db.search.PoolSwapRow
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.Message
 import com.trader.defichain.http.connections
@@ -75,7 +76,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                 val toAmountUSD = (toOraclePrice ?: 0.0) * amountTo
 
                 val tokenTo = getTokenSymbol(swap.toToken)
-                val row = DB.PoolSwapRow(
+                val row = PoolSwapRow(
                     fromAmountUSD = fromAmountUSD,
                     toAmountUSD = toAmountUSD,
                     txID = rawTX.txID,
@@ -90,7 +91,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                     to = swap.toAddress,
                     block = null,
                     id = -1,
-                    mempool = DB.MempoolEntry(
+                    mempool = MempoolEntry(
                         blockHeight = block.height,
                         txn = txn,
                         time = time,
