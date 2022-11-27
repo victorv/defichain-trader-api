@@ -19,13 +19,13 @@ latest_oracle_price as (
 select oracle_price.token, oracle_price.price from oracle_price 
 inner join latest_oracle lo on lo.token=oracle_price.token AND lo.block_height=oracle_price.block_height
 ),    
-minted_swap as (
+swaps as (
  select 
  pool_swap.tx_row_id,
  block_height,
  txn
  from pool_swap
- inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id
+ inner join minted_tx m on m.tx_row_id = pool_swap.tx_row_id
  inner join tx on pool_swap.tx_row_id = tx.row_id
  inner join latest_oracle_price fop on fop.token = token_from
  inner join latest_oracle_price top on top.token = token_to
@@ -47,42 +47,8 @@ minted_swap as (
   (:to_address IS NULL or "to" = :to_address) AND
   (:to_address_whitelist_is_null = true or "to" = ANY(:to_address_whitelist)) AND
   (:tx_id IS NULL or pool_swap.tx_row_id = :tx_id)
- order by minted_tx.block_height DESC, minted_tx.txn
+ order by m.block_height DESC, m.txn
  limit 26 offset 0
-),
-mempool_swap as (
- select 
- mempool.tx_row_id,
- block_height,
- -1
- from pool_swap
- inner join mempool on mempool.tx_row_id = pool_swap.tx_row_id
- inner join tx on pool_swap.tx_row_id = tx.row_id
- inner join latest_oracle_price fop on fop.token = token_from
- inner join latest_oracle_price top on top.token = token_to
- where
-  pool_swap.tx_row_id NOT IN (select tx_row_id from minted_swap) AND
-  pool_swap.tx_row_id <> ANY(:blacklisted) AND
-  (:min_block_height IS NULL or block_height >= :min_block_height) AND
-  (:max_block_height IS NULL or block_height <= :max_block_height) AND
-  (:min_fee IS NULL or fee >= :min_fee) AND
-  (:max_fee IS NULL or fee <= :max_fee) AND
-  (:min_input_amount IS NULL or amount_from * fop.price >= :min_input_amount) AND
-  (:max_input_amount IS NULL or amount_from * fop.price <= :max_input_amount) AND
-  (:min_output_amount IS NULL or amount_to * top.price >= :min_output_amount) AND
-  (:max_output_amount IS NULL or amount_to * top.price <= :max_output_amount) AND
-  (:token_from IS NULL or token_from = :token_from) AND
-  (:token_to IS NULL or token_to = :token_to) AND
-  (:from_address IS NULL or "from" = :from_address) AND
-  (:from_address_whitelist_is_null = true or "from" = ANY(:from_address_whitelist)) AND
-  (:to_address IS NULL or "to" = :to_address) AND
-  (:to_address_whitelist_is_null = true or "to" = ANY(:to_address_whitelist)) AND
-  (:tx_id IS NULL or pool_swap.tx_row_id = :tx_id)
- order by mempool.block_height DESC, mempool.txn
- limit 26
-),
-swaps as (
-select * from minted_swap union all select * from mempool_swap order by block_height DESC, txn limit 26
 )
 select
 tx.dc_tx_id as tx_id,
@@ -156,8 +122,12 @@ fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
             "blacklisted" to SQLValue(blacklistArray, Types.ARRAY),
         )
 
+        val sql =
+            if (!filter.confirmed) template_selectPoolSwaps.replace("minted_tx m", "mempool m")
+            else template_selectPoolSwaps
+
         val poolSwaps = ArrayList<PoolSwapRow>()
-        connection.prepareStatement(template_selectPoolSwaps, parameters).use { statement ->
+        connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
 
                 while (resultSet.next()) {
@@ -279,6 +249,8 @@ data class PoolHistoryFilter(
     val toTokenSymbol: String? = null,
     val pager: Pager? = null,
 ) {
+    val confirmed: Boolean = true
+
     companion object {
 
         val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
