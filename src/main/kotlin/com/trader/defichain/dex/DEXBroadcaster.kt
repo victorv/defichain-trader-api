@@ -3,6 +3,7 @@ package com.trader.defichain.dex
 import com.trader.defichain.http.Connection
 import com.trader.defichain.http.Message
 import com.trader.defichain.http.connections
+import com.trader.defichain.telegram.notifications
 import com.trader.defichain.zmq.newZQMBlockChannel
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString
@@ -30,17 +31,6 @@ private suspend fun broadcast() {
         try {
             for (poolSwap in connection.poolSwaps) {
                 sendSwapResult("swap-result", poolSwap, connection)
-            }
-
-            val graph = connection.graph
-            if (graph != null) {
-                val swap = PoolSwap(
-                    amountFrom = 1.0,
-                    tokenFrom = graph.fromToken,
-                    tokenTo = graph.toToken,
-                    desiredResult = 1.0,
-                )
-                sendSwapResult("graph-data-point", swap, connection)
             }
         } catch (e: Throwable) {
             e.printStackTrace()

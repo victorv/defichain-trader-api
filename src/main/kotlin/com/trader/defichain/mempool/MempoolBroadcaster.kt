@@ -101,29 +101,6 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 
                 connections.forEach {
                     try {
-                        row.priceImpact = 0.0
-
-                        val graph = it.graph
-                        if (graph != null) {
-
-                            val tokenID = getTokenId(graph.fromToken)
-                            val oraclePrice = if (tokenID != null) getOraclePrice(tokenID) ?: 1.0 else 1.0
-                            val graphSwap = PoolSwap(
-                                tokenFrom = graph.fromToken,
-                                tokenTo = graph.toToken,
-                                amountFrom = 1000.0 / oraclePrice,
-                                desiredResult = 1.0,
-                            )
-
-                            val pools = getActivePools()
-                            val estimate = executeSwaps(listOf(graphSwap), pools, false).swapResults[0].estimate
-                            val secondEstimate =
-                                executeSwaps(listOf(mempoolSwap, graphSwap), pools, false).swapResults[1].estimate
-                            if (estimate != secondEstimate) {
-                                row.priceImpact = ((secondEstimate - estimate) / ((secondEstimate + estimate) / 2.0)) * 100.0
-                            }
-                        }
-
                         val json = Json.encodeToString(
                             Message(
                                 id = "mempool-swap",

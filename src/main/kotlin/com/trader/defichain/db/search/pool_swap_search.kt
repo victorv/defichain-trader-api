@@ -81,8 +81,7 @@ left join block on block.height = minted_tx.block_height
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
-
-fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
+fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwapRow> {
     connectionPool.connection.use { connection ->
         var pagerBlockHeight: Int? = null
         var blacklist = arrayOf<Long>(-1)
@@ -123,7 +122,8 @@ fun getPoolSwaps(filter: PoolHistoryFilter): List<PoolSwapRow> {
         )
 
         val poolSwaps = ArrayList<PoolSwapRow>()
-        connection.prepareStatement(template_selectPoolSwaps, parameters).use { statement ->
+        val sql = if(!limit) template_selectPoolSwaps.replace("limit 26 offset 0", "") else template_selectPoolSwaps
+        connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
 
                 while (resultSet.next()) {

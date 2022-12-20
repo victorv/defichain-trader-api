@@ -10,6 +10,9 @@ import com.trader.defichain.mempool.sendMempoolEvents
 import com.trader.defichain.plugins.configureContentNegotiation
 import com.trader.defichain.plugins.configureRouting
 import com.trader.defichain.plugins.configureWebsockets
+import com.trader.defichain.telegram.approveNewNotifications
+import com.trader.defichain.telegram.loadNotifications
+import com.trader.defichain.telegram.notifyTelegramSubscribers
 import com.trader.defichain.zmq.receiveFullNodeEvents
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -39,6 +42,20 @@ fun main(vararg args: String) {
         cachePoolPairs()
     }
 
+    if (appServerConfig.production) {
+        if(!appServerConfig.local) {
+            println("Launching Telegram account authenticator")
+            GlobalScope.launch {
+                approveNewNotifications(coroutineContext)
+            }
+
+            GlobalScope.launch {
+                notifyTelegramSubscribers(coroutineContext)
+            }
+        }
+        loadNotifications()
+    }
+
     GlobalScope.launch(Dispatchers.IO) {
         broadcastDEX(coroutineContext)
     }
@@ -63,15 +80,29 @@ fun main(vararg args: String) {
 }
 
 @kotlinx.serialization.Serializable
+data class TelegramBotConfig(
+    val url: String,
+    val secret: String,
+) {
+    fun createURL(uri: String): String {
+        check(!uri.startsWith("/"))
+        return "$url/$secret/$uri"
+    }
+}
+
+@kotlinx.serialization.Serializable
 data class AppServerConfig(
     val production: Boolean,
     val local: Boolean = true,
+    val telegramBot: TelegramBotConfig,
     val webappRoot: String,
     val host: String,
     val port: Int,
     val rpc: RPCConfig,
     val zmq: ZMQConfig,
+    val accountsRoot: String,
 ) {
+
     init {
         if (production) {
             val webappRootPath = Paths.get(webappRoot)
@@ -82,6 +113,9 @@ data class AppServerConfig(
 
             val indexHTML = webappRootPath.resolve("index.html")
             check(Files.exists(indexHTML) && Files.isRegularFile(indexHTML))
+
+            val accountRootPath = Paths.get(accountsRoot)
+            check(Files.exists(accountRootPath) && Files.isDirectory(accountRootPath))
         }
     }
 }
