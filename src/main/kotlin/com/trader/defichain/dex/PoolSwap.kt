@@ -19,9 +19,7 @@ data class PoolSwap(
     override val tokenFrom: String,
     override val tokenTo: String,
     override val desiredResult: Double? = null,
-    var estimate: Double = 0.0,
-    var bestEstimate: Double = 0.0,
-    val estimates: MutableList<Pair<Long, Double>> = ArrayList()
+    val estimate: Double? = null,
 ) : AbstractPoolSwap {
     init {
         check(amountFrom > 0 && amountFrom < 999999999) { "Invalid `amount from`: $amountFrom" }

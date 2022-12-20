@@ -1,8 +1,10 @@
 package com.trader.defichain.http
 
+import com.trader.defichain.db.search.PoolHistoryFilter
 import com.trader.defichain.dex.PoolSwap
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -48,10 +50,5 @@ data class Message(
     val id: String,
     val data: JsonElement,
 ) {
-    fun asSetGraph() = Json.decodeFromJsonElement<SetGraph>(data)
     fun asPoolSwap() = Json.decodeFromJsonElement<PoolSwap>(data)
-    fun asUUID() = Json.decodeFromJsonElement<String>(data)
 }
-
-@kotlinx.serialization.Serializable
-data class SetGraph(val fromToken: String, val toToken: String)

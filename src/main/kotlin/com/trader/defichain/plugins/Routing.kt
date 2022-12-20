@@ -7,6 +7,7 @@ import com.trader.defichain.db.search.getMetrics
 import com.trader.defichain.db.search.getPoolSwaps
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
+import com.trader.defichain.telegram.notifications
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
@@ -36,14 +37,13 @@ fun Application.configureRouting() {
         webSocket("/stream") {
             val connection = Connection()
             connections += connection
+            connection.sendUUID()
+
             try {
                 launch(Dispatchers.IO) {
                     for (message in incoming) {
                         val message = Json.decodeFromString<Message>(message.data.decodeToString())
                         when (message.id) {
-                            "uuid" -> {
-                                connection.setUUID(message.asUUID())
-                            }
                             "add-swap" -> {
                                 val swap = message.asPoolSwap()
 
@@ -71,10 +71,6 @@ fun Application.configureRouting() {
                                     data = Json.encodeToJsonElement(pendingRemoval)
                                 )
                                 connection.send(Json.encodeToString(message))
-                            }
-                            "set-graph" -> {
-                                val graph = message.asSetGraph()
-                                connection.graph = graph
                             }
                         }
                     }
@@ -107,6 +103,22 @@ fun Application.configureRouting() {
             val response = getCachedTokens()
             call.response.header(HttpHeaders.ContentEncoding, "gzip")
             call.respondBytes(ContentType.Application.Json) { response }
+        }
+        post("/notification") {
+            val uuid = call.request.queryParameters["uuid"]!!
+            val description = call.request.queryParameters["description"]!!
+            check(description.length < 150)
+
+            val filter = call.receive<PoolHistoryFilter>()
+            for(connection in connections) {
+                if (connection.uuid == uuid) {
+                    connection.description = description
+                    connection.filter = filter
+                    call.respond(HttpStatusCode.OK, "ok")
+                    return@post
+                }
+            }
+            call.respond(HttpStatusCode.BadRequest, "invalid UUID")
         }
         get("/stats") {
             val template = call.request.queryParameters["template"]!!
@@ -162,3 +174,8 @@ private fun parsePoolSwap(requestedPoolSwap: String): PoolSwap {
         desiredResult = desiredResult.toDouble(),
     )
 }
+
+@kotlinx.serialization.Serializable
+data class LoginRequest(
+    val loginCode: Long,
+)
