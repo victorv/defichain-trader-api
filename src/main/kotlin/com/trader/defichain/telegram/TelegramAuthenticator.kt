@@ -30,6 +30,7 @@ suspend fun approveNewNotifications(coroutineContext: CoroutineContext) {
 private suspend fun approveNotifications(updates: List<ValidTelegramUpdate>) {
     for (update in updates) {
         val command = update.message.text.split(" ")
+        println(command)
         if (command.size == 2) {
             val uuid = command.last()
             if (command[0] == "delete") {
@@ -41,6 +42,12 @@ private suspend fun approveNotifications(updates: List<ValidTelegramUpdate>) {
                 }
             } else {
                 approveNotification(uuid, update.message.chat.id)
+            }
+        } else if (command.size == 1 && command[0] == "/list") {
+            for (notification in notifications) {
+                if (notification.chatID == update.message.chat.id) {
+                    notification.sendCard()
+                }
             }
         }
     }

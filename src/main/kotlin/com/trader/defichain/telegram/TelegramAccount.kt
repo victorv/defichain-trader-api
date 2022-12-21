@@ -37,7 +37,7 @@ suspend fun approveNotification(uuid: String, chatID: Long) {
             val notification = PoolHistoryNotification(UUID.randomUUID().toString(), description, chatID, filter)
             notification.write()
             notifications += notification
-            sendTelegramMessage(chatID, uuid, "Now active: <strong>${connection.description}</strong>")
+            sendTelegramMessage(chatID, notification.uuid, "Now active: <strong>${connection.description}</strong>", false)
             break
         }
     }
@@ -45,24 +45,31 @@ suspend fun approveNotification(uuid: String, chatID: Long) {
 
 interface Notification {
 
+    val chatID: Long
     val uuid: String
+    val description: String
 
     fun write()
 
     suspend fun delete()
 
     suspend fun test(value: Any)
+    suspend fun sendCard()
 }
 
 @kotlinx.serialization.Serializable
 data class PoolHistoryNotification(
     override val uuid: String,
-    val description: String,
-    val chatID: Long,
+    override val description: String,
+    override val chatID: Long,
     val filter: PoolHistoryFilter,
 ) : Notification {
 
     private val path = Paths.get(appServerConfig.accountsRoot).resolve("ph-$uuid.json")
+
+    override suspend fun sendCard() {
+        sendTelegramMessage(chatID, uuid, "<strong>${description}</strong>", true)
+    }
 
     override suspend fun delete() {
         notifications.removeIf { it.uuid == uuid }
@@ -138,7 +145,7 @@ data class PoolHistoryNotification(
             message += "<strong>to address:</strong> ${value.to}\n"
             message += "<strong>fee:</strong> ${value.fee} \n"
             message += "<strong>block:</strong> ${blockHeight}\n"
-            sendTelegramMessage(chatID, uuid, message)
+            sendTelegramMessage(chatID, uuid, message, false)
         }
     }
 
