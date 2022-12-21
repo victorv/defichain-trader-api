@@ -37,7 +37,7 @@ suspend fun approveNotification(uuid: String, chatID: Long) {
             val notification = PoolHistoryNotification(UUID.randomUUID().toString(), description, chatID, filter)
             notification.write()
             notifications += notification
-            sendTelegramMessage(chatID, notification.uuid, "Now active: <strong>${connection.description}</strong>", false)
+            sendTelegramMessage(chatID, notification.uuid, "Now active: <strong>${connection.description}</strong>, use the command /list to manage your notifications.", false)
             break
         }
     }
