@@ -91,7 +91,7 @@ data class TelegramMessage(
     val from: TelegramFrom? = null,
     val chat: TelegramChat? = null,
 ) {
-    fun isValid() = text != null && text.startsWith("/start ")
+    fun isValid() = text != null && (text.startsWith("/start ") || text.startsWith("/list"))
             && from != null && from.id > 0 && !from.isBot
             && chat != null && chat.id > 0
 
