@@ -30,6 +30,10 @@ private suspend fun broadcast() {
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
     for (notification in notifications) {
         try {
+            if (!notification.checkValidity()) {
+                continue
+            }
+
             for (row in rows) {
                 notification.test(row)
             }
