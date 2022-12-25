@@ -35,9 +35,16 @@ suspend fun approveNotification(uuid: String, chatID: Long) {
         val filter = connection.filter
         if (connection.uuid == uuid && description != null && filter != null) {
             val notification = PoolHistoryNotification(UUID.randomUUID().toString(), description, chatID, filter)
-            notification.write()
-            notifications += notification
-            sendTelegramMessage(chatID, notification.uuid, "Now active: <strong>${connection.description}</strong>, use the command /list to manage your notifications.", false)
+            if (notification.checkValidity()) {
+                notification.write()
+                notifications += notification
+                sendTelegramMessage(
+                    chatID,
+                    notification.uuid,
+                    "Now active: <strong>${connection.description}</strong>, use the command /list to manage your notifications.",
+                    false
+                )
+            }
             break
         }
     }
@@ -55,6 +62,7 @@ interface Notification {
 
     suspend fun test(value: Any)
     suspend fun sendCard()
+    suspend fun checkValidity(): Boolean
 }
 
 @kotlinx.serialization.Serializable
@@ -67,22 +75,42 @@ data class PoolHistoryNotification(
 
     private val path = Paths.get(appServerConfig.accountsRoot).resolve("ph-$uuid.json")
 
+    private fun doDelete() {
+        notifications.removeIf { it.uuid == uuid }
+        if(Files.exists(path)) {
+            Files.delete(path)
+        }
+    }
+
+    override suspend fun checkValidity(): Boolean {
+        if (filter.txID != null) {
+            doDelete()
+            sendTelegramMessage(
+                chatID,
+                uuid,
+                "Notification has been rejected by the system: <strong>$description</strong>\n\n<strong>reason:</strong> notifications do not work for filters that contain a TX ID.\nYour filter contained: [TX ID=${filter.txID}].\n\nUse /list to see notifications that are still active.",
+                false
+            )
+            return false
+        }
+        return true
+    }
+
     override suspend fun sendCard() {
         sendTelegramMessage(chatID, uuid, "<strong>${description}</strong>", true)
     }
 
     override suspend fun delete() {
-        notifications.removeIf { it.uuid == uuid }
-        Files.delete(path)
+        doDelete()
         sendTelegramMessage(chatID, uuid, "Notification has been deleted: <strong>$description</strong>", false)
     }
 
     override suspend fun test(value: Any) {
         if (value is PoolSwapRow) {
-            if(filter.fromTokenSymbol != null && value.tokenFrom != filter.fromTokenSymbol) {
+            if (filter.fromTokenSymbol != null && value.tokenFrom != filter.fromTokenSymbol) {
                 return
             }
-            if(filter.toTokenSymbol != null && value.tokenTo != filter.toTokenSymbol) {
+            if (filter.toTokenSymbol != null && value.tokenTo != filter.toTokenSymbol) {
                 return
             }
 
@@ -125,14 +153,14 @@ data class PoolHistoryNotification(
                 return
             }
 
-            if(filter.fromAddressGroup != null && filter.fromAddressGroup.isNotEmpty()) {
-                if(!filter.fromAddressGroup.contains(value.from)) {
+            if (filter.fromAddressGroup != null && filter.fromAddressGroup.isNotEmpty()) {
+                if (!filter.fromAddressGroup.contains(value.from)) {
                     return
                 }
             }
 
-            if(filter.toAddressGroup != null && filter.toAddressGroup.isNotEmpty()) {
-                if(!filter.toAddressGroup.contains(value.to)) {
+            if (filter.toAddressGroup != null && filter.toAddressGroup.isNotEmpty()) {
+                if (!filter.toAddressGroup.contains(value.to)) {
                     return
                 }
             }
