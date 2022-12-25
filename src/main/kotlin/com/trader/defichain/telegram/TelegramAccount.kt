@@ -93,6 +93,16 @@ data class PoolHistoryNotification(
             )
             return false
         }
+        if (filter.fromAddress != null && filter.fromAddress.length >= 64) {
+            doDelete()
+            sendTelegramMessage(
+                chatID,
+                uuid,
+                "Notification has been rejected by the system: <strong>$description</strong>\n\n<strong>reason:</strong> invalid address.\nYour filter contained: [fromAddress=${filter.fromAddress}].\n\nUse /list to see notifications that are still active.",
+                false
+            )
+            return false
+        }
         return true
     }
 
