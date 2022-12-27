@@ -83,7 +83,9 @@ class RPC {
         }
 
         suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? {
-            if (rawTX.matches(Regex(".+6a{0,4}446654786d.+"))) {
+            val ia = rawTX.indexOf("6a")
+            val ib = rawTX.indexOf("446654786d")
+            if (ia > 0 && ib > 0 && ia < ib) {
                 return null
             }
             return asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
