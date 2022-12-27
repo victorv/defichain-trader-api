@@ -25,7 +25,8 @@ private suspend fun broadcast() {
     val rows = getPoolSwaps(
         PoolHistoryFilter(
             minBlock = blockHeight + 1
-        )
+        ),
+        false
     )
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
     for (notification in notifications) {

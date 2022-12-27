@@ -122,7 +122,7 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwa
         )
 
         val poolSwaps = ArrayList<PoolSwapRow>()
-        val sql = if(!limit) template_selectPoolSwaps.replace("limit 26 offset 0", "") else template_selectPoolSwaps
+        val sql = if(!limit) template_selectPoolSwaps.replace("limit 26", "limit 250") else template_selectPoolSwaps
         connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
 
