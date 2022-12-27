@@ -82,8 +82,12 @@ class RPC {
             return responseBody.result
         }
 
-        suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? =
-            asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
+        suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? {
+            if (rawTX.matches(Regex(".+6a{0,4}446654786d.+"))) {
+                return null
+            }
+            return asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
+        }
 
         suspend fun getMasterNodeTX(txID: String?): MasterNodeTX {
             if (txID == null) {
