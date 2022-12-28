@@ -77,32 +77,12 @@ data class PoolHistoryNotification(
 
     private fun doDelete() {
         notifications.removeIf { it.uuid == uuid }
-        if(Files.exists(path)) {
+        if (Files.exists(path)) {
             Files.delete(path)
         }
     }
 
     override suspend fun checkValidity(): Boolean {
-        if (filter.txID != null) {
-            doDelete()
-            sendTelegramMessage(
-                chatID,
-                uuid,
-                "Notification has been rejected by the system: <strong>$description</strong>\n\n<strong>reason:</strong> notifications do not work for filters that contain a TX ID.\nYour filter contained: [TX ID=${filter.txID}].\n\nUse /list to see notifications that are still active.",
-                false
-            )
-            return false
-        }
-        if (filter.fromAddress != null && filter.fromAddress.length >= 64) {
-            doDelete()
-            sendTelegramMessage(
-                chatID,
-                uuid,
-                "Notification has been rejected by the system: <strong>$description</strong>\n\n<strong>reason:</strong> invalid address.\nYour filter contained: [fromAddress=${filter.fromAddress}].\n\nUse /list to see notifications that are still active.",
-                false
-            )
-            return false
-        }
         return true
     }
 
@@ -175,15 +155,18 @@ data class PoolHistoryNotification(
                 }
             }
 
-            var message = "<i>$description</i>\n"
-            message += "<i>DEX swap confirmed</i>\n"
-            message += "<strong>from:</strong> $${(value.fromAmountUSD * 100.0).roundToInt() / 100.0} ${value.tokenFrom}\n"
-            message += "<strong>to:</strong> $${(value.toAmountUSD * 100.0).roundToInt() / 100.0} ${value.tokenTo}\n"
-            message += "<strong>from address:</strong> ${value.from}\n"
-            message += "<strong>to address:</strong> ${value.to}\n"
-            message += "<strong>fee:</strong> ${value.fee} \n"
-            message += "<strong>block:</strong> ${blockHeight}\n"
-            sendTelegramMessage(chatID, uuid, message, false)
+            val message =
+                mutableListOf("""<strong>$description</strong>: <a href="https://defiscan.live/transactions/${value.txID}">defiscan</a>""")
+            message += """<strong>from:</strong> $${(value.fromAmountUSD * 100.0).roundToInt() / 100.0} ${value.tokenFrom}"""
+            message += """<strong>to:</strong> $${(value.toAmountUSD * 100.0).roundToInt() / 100.0} ${value.tokenTo}"""
+            if (value.from != value.to) {
+                message += """<strong>from address:</strong> <a href="https://defiscan.live/address/${value.from}">${value.from}</a>"""
+                message += """<strong>to address:</strong> <a href="https://defiscan.live/address/${value.to}">${value.to}</a>"""
+            } else {
+                message += """<strong>from/to:</strong> <a href="https://defiscan.live/address/${value.from}">${value.from}</a>"""
+            }
+            message += """<strong>block:</strong> <a href="https://defiscan.live/blocks/$blockHeight">${blockHeight}</a>"""
+            sendTelegramMessage(chatID, uuid, message.joinToString("\n"), false)
         }
     }
 
