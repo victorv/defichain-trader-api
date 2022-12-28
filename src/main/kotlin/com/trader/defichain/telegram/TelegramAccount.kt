@@ -77,7 +77,7 @@ data class PoolHistoryNotification(
 
     private fun doDelete() {
         notifications.removeIf { it.uuid == uuid }
-        if(Files.exists(path)) {
+        if (Files.exists(path)) {
             Files.delete(path)
         }
     }
