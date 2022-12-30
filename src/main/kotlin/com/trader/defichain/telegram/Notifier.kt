@@ -55,7 +55,7 @@ private suspend fun broadcast() {
                     blocks += row.block!!.blockHeight
                 }
             }
-            if (matches.isNotEmpty() || (filter.minInputAmount != null && sumInputAmount >= filter.minInputAmount)) {
+            if (matches.isNotEmpty()) {
                 send(matches, (sumInputAmount * 100.0).roundToInt() / 100.0, blocks, notification)
             }
         } catch (e: Throwable) {
@@ -87,14 +87,6 @@ private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, blo
         }
     } else if (matches.size > 20) {
         message += "Too many matching transactions were found, ${message.size - 20} matches have been ignored"
-    }
-
-    if (sumInputAmount != 0.0) {
-        message += if (notification.filter.minInputAmount == null) {
-            "sum of all input amounts: $sumInputAmount USDT"
-        } else {
-            "sum of other input amounts (&lt; ${notification.filter.minInputAmount} USDT): $sumInputAmount USDT"
-        }
     }
 
     message += if (blocks.size == 1) {
