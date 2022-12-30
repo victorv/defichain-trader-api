@@ -72,11 +72,9 @@ private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, not
         mutableListOf("""<strong>${notification.description}</strong>""")
     val blocks = TreeSet<Int>()
     for (match in matches.sortedByDescending { it.fromAmountUSD }.slice(IntRange(0, min(19, matches.size - 1)))) {
-        val amountFrom = if (match.tokenFrom == "USDT") match.amountFrom else {
-            val amountFromDUSD = (match.fromAmountUSD * 100.0).roundToInt() / 100.0
-            "[$amountFromDUSD USDT] ${match.amountFrom}"
-        }
-        message += """$amountFrom ${match.tokenFrom} to ${match.amountTo} ${match.tokenTo} <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
+        val amountFromUSD = (match.fromAmountUSD * 100.0).roundToInt() / 100.0
+        val amountToUSD = (match.toAmountUSD * 100.0).roundToInt() / 100.0
+        message += """$$amountFromUSD ${match.tokenFrom} to $${amountToUSD} ${match.tokenTo} <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
         blocks += match.block!!.blockHeight
     }
     if (matches.size == 1) {

@@ -163,18 +163,18 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
     val amountFrom = resultSet.getBigDecimal(5)
     val amountTo = resultSet.getBigDecimal(6)
 
-    val fromAmountUSD = testPoolSwap(PoolSwap(
+    val fromAmountUSD = if(amountFrom.toDouble() == 0.0) 0.0 else testPoolSwap(PoolSwap(
         amountFrom = amountFrom.toDouble(),
         tokenFrom = tokenFrom,
         tokenTo = "USDT",
         desiredResult = 1.0,
-    ))
-    val toAmountUSD = testPoolSwap(PoolSwap(
+    )).estimate
+    val toAmountUSD = if(amountTo.toDouble() == 0.0) 0.0 else testPoolSwap(PoolSwap(
         amountFrom = amountTo.toDouble(),
         tokenFrom = tokenTo,
         tokenTo = "USDT",
         desiredResult = 1.0,
-    ))
+    )).estimate
 
     return PoolSwapRow(
         txID = resultSet.getString(1),
@@ -190,8 +190,8 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
         mempool = mempoolEntry,
         tokenToAlt = resultSet.getString(15),
         id = resultSet.getLong(16),
-        fromAmountUSD = if (tokenFrom == "USDT") amountFrom.toDouble() else fromAmountUSD.estimate,
-        toAmountUSD = if (tokenTo == "USDT") amountTo.toDouble() else toAmountUSD.estimate,
+        fromAmountUSD = if (tokenFrom == "USDT") amountFrom.toDouble() else fromAmountUSD,
+        toAmountUSD = if (tokenTo == "USDT") amountTo.toDouble() else toAmountUSD,
         priceImpact = 0.0,
     )
 }
