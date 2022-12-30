@@ -2,7 +2,9 @@ package com.trader.defichain.db.search
 
 import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
+import com.trader.defichain.dex.PoolSwap
 import com.trader.defichain.dex.getOraclePriceForSymbol
+import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.util.SQLValue
 import com.trader.defichain.util.floorPlain
 import com.trader.defichain.util.prepareStatement
@@ -161,10 +163,18 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
     val amountFrom = resultSet.getBigDecimal(5)
     val amountTo = resultSet.getBigDecimal(6)
 
-    val fromOraclePrice = getOraclePriceForSymbol(tokenFrom)
-    val fromAmountUSD = (fromOraclePrice ?: 0.0) * amountFrom.toDouble()
-    val toOraclePrice = getOraclePriceForSymbol(tokenTo)
-    val toAmountUSD = (toOraclePrice ?: 0.0) * (amountTo?.toDouble() ?: 0.0)
+    val fromAmountUSD = testPoolSwap(PoolSwap(
+        amountFrom = amountFrom.toDouble(),
+        tokenFrom = tokenFrom,
+        tokenTo = "USDT",
+        desiredResult = 1.0,
+    ))
+    val toAmountUSD = testPoolSwap(PoolSwap(
+        amountFrom = amountTo.toDouble(),
+        tokenFrom = tokenTo,
+        tokenTo = "USDT",
+        desiredResult = 1.0,
+    ))
 
     return PoolSwapRow(
         txID = resultSet.getString(1),
@@ -180,8 +190,8 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
         mempool = mempoolEntry,
         tokenToAlt = resultSet.getString(15),
         id = resultSet.getLong(16),
-        fromAmountUSD = fromAmountUSD,
-        toAmountUSD = toAmountUSD,
+        fromAmountUSD = if (tokenFrom == "USDT") amountFrom.toDouble() else fromAmountUSD.estimate,
+        toAmountUSD = if (tokenTo == "USDT") amountTo.toDouble() else toAmountUSD.estimate,
         priceImpact = 0.0,
     )
 }

@@ -11,10 +11,9 @@ import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Paths
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.name
-import kotlin.math.roundToInt
 
 val notifications = CopyOnWriteArrayList<Notification>()
 
@@ -55,12 +54,13 @@ interface Notification {
     val chatID: Long
     val uuid: String
     val description: String
+    val filter: PoolHistoryFilter
 
     fun write()
 
     suspend fun delete()
 
-    suspend fun test(value: Any)
+    suspend fun matches(value: Any): Boolean
     suspend fun sendCard()
     suspend fun checkValidity(): Boolean
 }
@@ -70,7 +70,7 @@ data class PoolHistoryNotification(
     override val uuid: String,
     override val description: String,
     override val chatID: Long,
-    val filter: PoolHistoryFilter,
+    override val filter: PoolHistoryFilter,
 ) : Notification {
 
     private val path = Paths.get(appServerConfig.accountsRoot).resolve("ph-$uuid.json")
@@ -95,79 +95,43 @@ data class PoolHistoryNotification(
         sendTelegramMessage(chatID, uuid, "Notification has been deleted: <strong>$description</strong>", false)
     }
 
-    override suspend fun test(value: Any) {
+    override suspend fun matches(value: Any): Boolean {
         if (value is PoolSwapRow) {
             if (filter.fromTokenSymbol != null && value.tokenFrom != filter.fromTokenSymbol) {
-                return
+                return false
             }
             if (filter.toTokenSymbol != null && value.tokenTo != filter.toTokenSymbol) {
-                return
+                return false
             }
 
             val fee = BigDecimal(value.fee).toDouble()
             if (filter.minFee != null && fee < filter.minFee) {
-                return
+                return false
             }
             if (filter.maxFee != null && fee > filter.maxFee) {
-                return
-            }
-
-            val blockHeight = value.block?.blockHeight ?: return
-            if (filter.minBlock != null && blockHeight < filter.minBlock) {
-                return
-            }
-            if (filter.maxBlock != null && blockHeight > filter.maxBlock) {
-                return
-            }
-
-            val input = value.fromAmountUSD
-            if (filter.minInputAmount != null && input < filter.minInputAmount) {
-                return
-            }
-            if (filter.maxInputAmount != null && input > filter.maxInputAmount) {
-                return
-            }
-
-            val output = value.toAmountUSD
-            if (filter.minOutputAmount != null && output < filter.minOutputAmount) {
-                return
-            }
-            if (filter.maxOutputAmount != null && output > filter.maxOutputAmount) {
-                return
+                return false
             }
 
             if (filter.fromAddress != null && value.from != filter.fromAddress) {
-                return
+                return false
             }
             if (filter.toAddress != null && value.to != filter.toAddress) {
-                return
+                return false
             }
 
             if (filter.fromAddressGroup != null && filter.fromAddressGroup.isNotEmpty()) {
                 if (!filter.fromAddressGroup.contains(value.from)) {
-                    return
+                    return false
                 }
             }
 
             if (filter.toAddressGroup != null && filter.toAddressGroup.isNotEmpty()) {
                 if (!filter.toAddressGroup.contains(value.to)) {
-                    return
+                    return false
                 }
             }
-
-            val message =
-                mutableListOf("""<strong>$description</strong>: <a href="https://defiscan.live/transactions/${value.txID}">defiscan</a>""")
-            message += """<strong>from:</strong> $${(value.fromAmountUSD * 100.0).roundToInt() / 100.0} ${value.tokenFrom}"""
-            message += """<strong>to:</strong> $${(value.toAmountUSD * 100.0).roundToInt() / 100.0} ${value.tokenTo}"""
-            if (value.from != value.to) {
-                message += """<strong>from address:</strong> <a href="https://defiscan.live/address/${value.from}">${value.from}</a>"""
-                message += """<strong>to address:</strong> <a href="https://defiscan.live/address/${value.to}">${value.to}</a>"""
-            } else {
-                message += """<strong>from/to:</strong> <a href="https://defiscan.live/address/${value.from}">${value.from}</a>"""
-            }
-            message += """<strong>block:</strong> <a href="https://defiscan.live/blocks/$blockHeight">${blockHeight}</a>"""
-            sendTelegramMessage(chatID, uuid, message.joinToString("\n"), false)
         }
+        return true
     }
 
     override fun write() {

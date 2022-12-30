@@ -110,11 +110,6 @@ fun Application.configureRouting() {
             check(description.length < 150)
 
             val filter = call.receive<PoolHistoryFilter>()
-            if (filter.txID != null) {
-                call.respond(HttpStatusCode.BadRequest, "contains TX ID")
-                return@post
-            }
-
             val poolSwaps = getPoolSwaps(filter)
             if (poolSwaps.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, "does not match any records")
