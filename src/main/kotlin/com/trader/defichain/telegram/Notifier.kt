@@ -40,6 +40,7 @@ private suspend fun broadcast() {
                 continue
             }
 
+            val blocks = TreeSet<Int>()
             val matches = mutableListOf<PoolSwapRow>()
             var sumInputAmount = 0.0
             for (row in rows) {
@@ -51,10 +52,11 @@ private suspend fun broadcast() {
                     } else {
                         sumInputAmount += row.fromAmountUSD
                     }
+                    blocks += row.block!!.blockHeight
                 }
             }
             if (matches.isNotEmpty() || (filter.minInputAmount != null && sumInputAmount >= filter.minInputAmount)) {
-                send(matches, (sumInputAmount * 100.0).roundToInt() / 100.0, notification)
+                send(matches, (sumInputAmount * 100.0).roundToInt() / 100.0, blocks, notification)
             }
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -67,15 +69,13 @@ private suspend fun broadcast() {
     blockHeight = newBlockHeight
 }
 
-private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, notification: Notification) {
+private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, blocks: Set<Int>, notification: Notification) {
     val message =
         mutableListOf("""<strong>${notification.description}</strong>""")
-    val blocks = TreeSet<Int>()
     for (match in matches.sortedByDescending { it.fromAmountUSD }.slice(IntRange(0, min(19, matches.size - 1)))) {
         val amountFromUSD = (match.fromAmountUSD * 100.0).roundToInt() / 100.0
         val amountToUSD = (match.toAmountUSD * 100.0).roundToInt() / 100.0
         message += """$$amountFromUSD ${match.tokenFrom} to $${amountToUSD} ${match.tokenTo} <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
-        blocks += match.block!!.blockHeight
     }
     if (matches.size == 1) {
         val match = matches[0]
@@ -101,7 +101,11 @@ private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, not
         val height = blocks.first()
         """<strong>block:</strong> <a href="https://defiscan.live/blocks/$height">${height}</a>"""
     } else {
-        """<strong>blocks:</strong> ${blocks.joinToString(", ")}"""
+        if (blocks.size > 5) {
+            """<strong>blocks:</strong> ${blocks.first()} - ${blocks.last()}"""
+        } else {
+            """<strong>blocks:</strong> ${blocks.joinToString(", ")}"""
+        }
     }
     sendTelegramMessage(notification.chatID, notification.uuid, message.joinToString("\n"), false)
 }
