@@ -30,18 +30,21 @@ suspend fun approveNewNotifications(coroutineContext: CoroutineContext) {
 private suspend fun approveNotifications(updates: List<ValidTelegramUpdate>) {
     for (update in updates) {
         val command = update.message.text.split(" ")
-        println(command)
         if (command.size == 2) {
             val uuid = command.last()
             if (command[0] == "delete") {
                 for (notification in notifications) {
-                    if (notification.uuid == uuid) {
+                    if (notification.uuid == uuid && notification.chatID == update.message.chat.id) {
                         notification.delete()
                         break
                     }
                 }
             } else {
-                approveNotification(uuid, update.message.chat.id)
+                if (notifications.count { it.chatID == update.message.chat.id } < 15) {
+                    approveNotification(uuid, update.message.chat.id)
+                } else {
+                    sendTelegramMessage(update.message.chat.id, uuid, "You have reached the notification limit", false)
+                }
             }
         } else if (command.size == 1 && command[0] == "/list") {
             for (notification in notifications) {
