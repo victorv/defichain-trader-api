@@ -14,7 +14,7 @@ private val UTC = ZoneId.of("UTC")
 private const val oneHour = 120
 private const val oneDay = oneHour * 24
 private const val fiveDays = oneDay * 5
-private const val oneMonth = oneDay * 31
+private const val threeMonths = oneDay * 31 * 3
 
 @Language("sql")
 private val template_poolPairs = """
@@ -52,7 +52,7 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
 
         val params = mapOf<String, Any>(
             "pool_ids" to poolIDArray,
-            "block_count" to oneMonth.coerceAtMost(blockCount)
+            "block_count" to threeMonths.coerceAtMost(blockCount)
         )
 
         connection.prepareStatement(template_poolPairs, params).use { statement ->
