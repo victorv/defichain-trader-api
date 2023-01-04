@@ -14,6 +14,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 private var blockHeight = runBlocking { RPC.getValue<Int>(RPCMethod.GET_BLOCK_COUNT) }
+private const val matchLimit = 10
 
 suspend fun notifyTelegramSubscribers(coroutineContext: CoroutineContext) {
     while (coroutineContext.isActive) {
@@ -33,30 +34,32 @@ private suspend fun broadcast() {
         false
     )
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
-    for (notification in notifications) {
+    for ((chatID, group) in notifications.groupBy { it.chatID }) {
+        val lines = ArrayList<String>()
         try {
-            val filter = notification.filter
-            if (!notification.checkValidity()) {
-                continue
-            }
+            for (notification in group) {
+                if (!notification.checkValidity()) {
+                    continue
+                }
 
-            val blocks = TreeSet<Int>()
-            val matches = mutableListOf<PoolSwapRow>()
-            var sumInputAmount = 0.0
-            for (row in rows) {
-                if (row.block == null) continue
+                val blocks = TreeSet<Int>()
+                val matches = mutableListOf<PoolSwapRow>()
+                for (row in rows) {
+                    if (row.block == null) continue
 
-                if (notification.matches(row)) {
-                    if (filter.minInputAmount == null || row.fromAmountUSD >= filter.minInputAmount) {
+                    if (notification.matches(row)) {
                         matches.add(row)
-                    } else {
-                        sumInputAmount += row.fromAmountUSD
+                        blocks += row.block!!.blockHeight
                     }
-                    blocks += row.block!!.blockHeight
+                }
+                if (matches.isNotEmpty()) {
+                    lines.addAll(createMessage(matches, blocks, notification))
+                    lines.add("-")
                 }
             }
-            if (matches.isNotEmpty()) {
-                send(matches, (sumInputAmount * 100.0).roundToInt() / 100.0, blocks, notification)
+
+            if(lines.isNotEmpty()) {
+                sendTelegramMessage(chatID, "", lines.joinToString("\n"), false)
             }
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -69,35 +72,35 @@ private suspend fun broadcast() {
     blockHeight = newBlockHeight
 }
 
-private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, blocks: Set<Int>, notification: Notification) {
+private fun createMessage(
+    matches: List<PoolSwapRow>,
+    blocks: Set<Int>,
+    notification: Notification
+): List<String> {
     val message =
         mutableListOf("""<strong>${notification.description}</strong>""")
-    for (match in matches.sortedByDescending { it.fromAmountUSD }.slice(IntRange(0, min(19, matches.size - 1)))) {
+    for (match in matches.sortedByDescending { it.fromAmountUSD }
+        .slice(IntRange(0, min(matchLimit - 1, matches.size - 1)))) {
         val amountFromUSD = (match.fromAmountUSD * 100.0).roundToInt() / 100.0
         val amountToUSD = (match.toAmountUSD * 100.0).roundToInt() / 100.0
         message += """$$amountFromUSD ${match.tokenFrom} to $${amountToUSD} ${match.tokenTo} <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
     }
-    if (matches.size == 1) {
-        val match = matches[0]
-        if (match.from != match.to) {
-            message += """<strong>from address:</strong> <a href="https://defiscan.live/address/${match.from}">${match.from}</a>"""
-            message += """<strong>to address:</strong> <a href="https://defiscan.live/address/${match.to}">${match.to}</a>"""
-        } else {
-            message += """<strong>from/to:</strong> <a href="https://defiscan.live/address/${match.from}">${match.from}</a>"""
-        }
-    } else if (matches.size > 20) {
-        message += "Too many matching transactions were found, ${message.size - 20} matches have been ignored"
+
+    if (matches.size > matchLimit) {
+        val skipped = message.size - matchLimit
+        val verb = if (skipped == 1) "match is" else "matches are"
+        message += "&lt;$skipped $verb not displayed&gt;"
     }
 
+    val blockLinks = blocks.map { """<a href="https://defiscan.live/blocks/$it">$it</a>""" }
     message += if (blocks.size == 1) {
-        val height = blocks.first()
-        """<strong>block:</strong> <a href="https://defiscan.live/blocks/$height">${height}</a>"""
+        """<strong>block:</strong> ${blockLinks.first()}"""
     } else {
-        if (blocks.size > 5) {
-            """<strong>blocks:</strong> ${blocks.first()} - ${blocks.last()}"""
+        if (blocks.size > 3) {
+            """<strong>blocks:</strong> ${blockLinks.first()} - ${blockLinks.last()}"""
         } else {
-            """<strong>blocks:</strong> ${blocks.joinToString(", ")}"""
+            """<strong>blocks:</strong> ${blockLinks.joinToString(", ")}"""
         }
     }
-    sendTelegramMessage(notification.chatID, notification.uuid, message.joinToString("\n"), false)
+    return message
 }
