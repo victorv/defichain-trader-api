@@ -104,6 +104,22 @@ data class PoolHistoryNotification(
                 return false
             }
 
+            val input = value.fromAmountUSD
+            if (filter.minInputAmount != null && input < filter.minInputAmount) {
+                return false
+            }
+            if (filter.maxInputAmount != null && input > filter.maxInputAmount) {
+                return false
+            }
+
+            val output = value.toAmountUSD
+            if (filter.minOutputAmount != null && output < filter.minOutputAmount) {
+                return false
+            }
+            if (filter.maxOutputAmount != null && output > filter.maxOutputAmount) {
+                return false
+            }
+
             val fee = BigDecimal(value.fee).toDouble()
             if (filter.minFee != null && fee < filter.minFee) {
                 return false

@@ -34,30 +34,32 @@ private suspend fun broadcast() {
         false
     )
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
-    for (notification in notifications) {
+    for ((chatID, group) in notifications.groupBy { it.chatID }) {
+        val lines = ArrayList<String>()
         try {
-            val filter = notification.filter
-            if (!notification.checkValidity()) {
-                continue
-            }
+            for (notification in group) {
+                if (!notification.checkValidity()) {
+                    continue
+                }
 
-            val blocks = TreeSet<Int>()
-            val matches = mutableListOf<PoolSwapRow>()
-            var sumInputAmount = 0.0
-            for (row in rows) {
-                if (row.block == null) continue
+                val blocks = TreeSet<Int>()
+                val matches = mutableListOf<PoolSwapRow>()
+                for (row in rows) {
+                    if (row.block == null) continue
 
-                if (notification.matches(row)) {
-                    if (filter.minInputAmount == null || row.fromAmountUSD >= filter.minInputAmount) {
+                    if (notification.matches(row)) {
                         matches.add(row)
-                    } else {
-                        sumInputAmount += row.fromAmountUSD
+                        blocks += row.block!!.blockHeight
                     }
-                    blocks += row.block!!.blockHeight
+                }
+                if (matches.isNotEmpty()) {
+                    lines.addAll(createMessage(matches, blocks, notification))
+                    lines.add("-")
                 }
             }
-            if (matches.isNotEmpty()) {
-                send(matches, (sumInputAmount * 100.0).roundToInt() / 100.0, blocks, notification)
+
+            if(lines.isNotEmpty()) {
+                sendTelegramMessage(chatID, "", lines.joinToString("\n"), false)
             }
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -70,10 +72,15 @@ private suspend fun broadcast() {
     blockHeight = newBlockHeight
 }
 
-private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, blocks: Set<Int>, notification: Notification) {
+private fun createMessage(
+    matches: List<PoolSwapRow>,
+    blocks: Set<Int>,
+    notification: Notification
+): List<String> {
     val message =
         mutableListOf("""<strong>${notification.description}</strong>""")
-    for (match in matches.sortedByDescending { it.fromAmountUSD }.slice(IntRange(0, min(matchLimit - 1, matches.size - 1)))) {
+    for (match in matches.sortedByDescending { it.fromAmountUSD }
+        .slice(IntRange(0, min(matchLimit - 1, matches.size - 1)))) {
         val amountFromUSD = (match.fromAmountUSD * 100.0).roundToInt() / 100.0
         val amountToUSD = (match.toAmountUSD * 100.0).roundToInt() / 100.0
         message += """$$amountFromUSD ${match.tokenFrom} to $${amountToUSD} ${match.tokenTo} <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
@@ -95,5 +102,5 @@ private suspend fun send(matches: List<PoolSwapRow>, sumInputAmount: Double, blo
             """<strong>blocks:</strong> ${blockLinks.joinToString(", ")}"""
         }
     }
-    sendTelegramMessage(notification.chatID, notification.uuid, message.joinToString("\n"), false)
+    return message
 }
