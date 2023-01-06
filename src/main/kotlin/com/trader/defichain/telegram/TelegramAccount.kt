@@ -3,6 +3,8 @@ package com.trader.defichain.telegram
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.search.PoolHistoryFilter
 import com.trader.defichain.db.search.PoolSwapRow
+import com.trader.defichain.dex.getTokenId
+import com.trader.defichain.dex.getTokenIdentifiers
 import com.trader.defichain.http.connections
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -97,11 +99,21 @@ data class PoolHistoryNotification(
 
     override suspend fun matches(value: Any): Boolean {
         if (value is PoolSwapRow) {
-            if (filter.fromTokenSymbol != null && value.tokenFrom != filter.fromTokenSymbol) {
-                return false
+            if (filter.fromTokenSymbol != null) {
+                val tokenFrom = getTokenId(value.tokenFrom)
+                val whitelist = getTokenIdentifiers(filter.fromTokenSymbol)
+
+                if (whitelist.isNotEmpty() && !whitelist.contains(tokenFrom)) {
+                    return false
+                }
             }
-            if (filter.toTokenSymbol != null && value.tokenTo != filter.toTokenSymbol) {
-                return false
+            if (filter.toTokenSymbol != null) {
+                val tokenTo = getTokenId(value.tokenTo)
+                val whitelist = getTokenIdentifiers(filter.toTokenSymbol)
+
+                if (whitelist.isNotEmpty() && !whitelist.contains(tokenTo)) {
+                    return false
+                }
             }
 
             val input = value.fromAmountUSD
