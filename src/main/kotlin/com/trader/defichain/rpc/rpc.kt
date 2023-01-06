@@ -1,7 +1,6 @@
 package com.trader.defichain.rpc
 
 import com.trader.defichain.config.rpcConfig
-import com.trader.defichain.db.insertTX
 import com.trader.defichain.dex.PoolPair
 import com.trader.defichain.indexer.calculateFee
 import com.trader.defichain.plugins.getHttpClientEngine
@@ -36,16 +35,11 @@ val limit1000 = JsonObject(
 class RPC {
     companion object {
 
-        suspend inline fun <reified T> tryGet(method: RPCMethod, vararg parameters: JsonElement): RPCResponse<T?> {
-            val request = RPCRequest(
-                jsonrpc = "1.0",
-                method = method.id,
-                params = JsonArray(parameters.toList())
-            )
+        suspend inline fun <reified T> tryGet(request: RPCRequest): RPCResponse<T?> {
             try {
                 return doRequest<T>(request)
             } catch (e: Throwable) {
-                if(e is IOException) {
+                if (e is IOException) {
                     return retryRequest<T>(request)
                 }
                 throw RuntimeException("Request failed: $request", e)
@@ -62,24 +56,39 @@ class RPC {
         }
 
         suspend inline fun <reified T> doRequest(request: RPCRequest): RPCResponse<T?> {
-            val response = rpcClient.post("http://${rpcConfig.host}:${rpcConfig.port}") {
+            val url = if (request.instance == RPCInstance.LIVE) "http://${rpcConfig.host}:${rpcConfig.port}"
+            else "http://${rpcConfig.host}:18554"
+
+            val response = rpcClient.post(url) {
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }
 
             val responseBody = response.body<RPCResponse<T?>>()
+            if (request.noResponse) return responseBody
+
             check(responseBody.result != null || responseBody.error != null) {
                 "Request failed, invalid response body: ${request}, $responseBody"
             }
             return responseBody
         }
 
-        suspend inline fun <reified T> getValue(method: RPCMethod, vararg parameters: JsonElement): T {
-            val responseBody = tryGet<T>(method, *parameters)
-            check(responseBody.result != null && responseBody.error == null) {
-                "Request failed: RPCRequest(${method}, $parameters), $responseBody"
+        suspend inline fun <reified T> getValue(request: RPCRequest): T {
+            val responseBody = tryGet<T>(request)
+            check( responseBody.result != null && responseBody.error == null) {
+                "Request failed: $request, $responseBody"
             }
             return responseBody.result
+        }
+
+        suspend inline fun <reified T> getValue(method: RPCMethod, vararg parameters: JsonElement): T {
+            return getValue(
+                RPCRequest(
+                    jsonrpc = "1.0",
+                    method = method.id,
+                    params = JsonArray(parameters.toList())
+                )
+            )
         }
 
         suspend fun decodeCustomTX(rawTX: String): CustomTX.Record? {
@@ -88,7 +97,13 @@ class RPC {
             if (ia > 0 && ib > 0 && ia < ib) {
                 return null
             }
-            return asCustomTX(tryGet<JsonElement>(RPCMethod.DECODE_CUSTOM_TX, JsonPrimitive(rawTX)).result)
+
+            val request = RPCRequest(
+                jsonrpc = "1.0",
+                method = RPCMethod.DECODE_CUSTOM_TX.id,
+                params = JsonArray(listOf(JsonPrimitive(rawTX)))
+            )
+            return asCustomTX(tryGet<JsonElement>(request).result)
         }
 
         suspend fun getMasterNodeTX(txID: String?): MasterNodeTX {
@@ -158,11 +173,18 @@ val rpcClient = HttpClient(getHttpClientEngine()) {
     }
 }
 
+enum class RPCInstance {
+    STANDBY,
+    LIVE
+}
+
 @Serializable
 data class RPCRequest(
     val jsonrpc: String,
     val method: String,
-    val params: JsonArray
+    val params: JsonArray,
+    val instance: RPCInstance = RPCInstance.LIVE,
+    val noResponse: Boolean = false,
 )
 
 @Serializable

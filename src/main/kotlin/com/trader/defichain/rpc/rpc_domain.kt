@@ -69,5 +69,6 @@ enum class RPCMethod(val id: String) {
     DECODE_CUSTOM_TX("decodecustomtx"),
     GET_RAW_TRANSACTION("getrawtransaction"),
     GET_BLOCK_HASH("getblockhash"),
+    SUBMIT_BLOCK("submitblock"),
     GET_VAULT("getvault");
 }

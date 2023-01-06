@@ -39,6 +39,10 @@ fun main(vararg args: String) {
     }
 
     scopes += GlobalScope.launch {
+        indexPoolPairs(coroutineContext)
+    }
+
+    scopes += GlobalScope.launch {
         announceZMQBatches(coroutineContext)
     }
 
