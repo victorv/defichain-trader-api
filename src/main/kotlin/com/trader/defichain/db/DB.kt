@@ -302,7 +302,7 @@ object DB {
         }
     }
 
-    private fun toIsAny(columnName: String, tokenIdentifiers: Array<Int>): String {
+    fun toIsAny(columnName: String, tokenIdentifiers: Array<Int>): String {
         if (tokenIdentifiers.isEmpty()) {
             return "NULL IS NULL"
         }

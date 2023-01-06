@@ -4,10 +4,12 @@ import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
 import com.trader.defichain.dex.PoolSwap
 import com.trader.defichain.dex.getOraclePriceForSymbol
+import com.trader.defichain.dex.getTokenIdentifiers
 import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.util.SQLValue
 import com.trader.defichain.util.floorPlain
 import com.trader.defichain.util.prepareStatement
+import io.ktor.server.application.*
 import org.intellij.lang.annotations.Language
 import java.sql.ResultSet
 import java.sql.Types
@@ -42,8 +44,8 @@ swaps as (
   (:max_input_amount IS NULL or amount_from * fop.price <= :max_input_amount) AND
   (:min_output_amount IS NULL or amount_to * top.price >= :min_output_amount) AND
   (:max_output_amount IS NULL or amount_to * top.price <= :max_output_amount) AND
-  (:token_from IS NULL or token_from = :token_from) AND
-  (:token_to IS NULL or token_to = :token_to) AND
+  (:token_from) AND
+  (:token_to) AND
   (:from_address IS NULL or "from" = :from_address) AND
   (:from_address_whitelist_is_null = true or "from" = ANY(:from_address_whitelist)) AND
   (:to_address IS NULL or "to" = :to_address) AND
@@ -93,8 +95,8 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwa
         }
         val blacklistArray = connection.createArrayOf("BIGINT", blacklist)
 
-        val fromTokenID = DB.selectTokenID(connection, filter.fromTokenSymbol)
-        val toTokenID = DB.selectTokenID(connection, filter.toTokenSymbol)
+        val tokensFrom = getTokenIdentifiers(filter.fromTokenSymbol)
+        val tokensTo = getTokenIdentifiers(filter.toTokenSymbol)
         val fromAddress = DB.selectAddressRowID(connection, filter.fromAddress)
         val toAddress = DB.selectAddressRowID(connection, filter.toAddress)
         val fromAddressWhitelist = DB.selectAddresses(connection, filter.fromAddressGroup)
@@ -102,8 +104,6 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwa
         val txRowID = DB.selectTransactionRowID(connection, filter.txID)
 
         val parameters = mapOf(
-            "token_from" to SQLValue(fromTokenID, Types.INTEGER),
-            "token_to" to SQLValue(toTokenID, Types.INTEGER),
             "from_address" to SQLValue(fromAddress, Types.BIGINT),
             "to_address" to SQLValue(toAddress, Types.BIGINT),
             "from_address_whitelist" to SQLValue(fromAddressWhitelist, Types.ARRAY, "BIGINT"),
@@ -124,7 +124,10 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwa
         )
 
         val poolSwaps = ArrayList<PoolSwapRow>()
-        val sql = if(!limit) template_selectPoolSwaps.replace("limit 26", "limit 250") else template_selectPoolSwaps
+        var sql = if(!limit) template_selectPoolSwaps.replace("limit 26", "limit 250") else template_selectPoolSwaps
+        sql = sql.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
+        sql = sql.replace(":token_to", DB.toIsAny("token_to", tokensTo))
+
         connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
 
@@ -257,7 +260,7 @@ data class PoolHistoryFilter(
 ) {
     companion object {
 
-        val tokenSymbolRegex = "^[a-zA-Z\\d\\./]+$".toRegex()
+        val tokenSymbolRegex = "^[a-zA-Z\\d\\./_]+$".toRegex()
     }
 
     private fun checkTokenSymbol(tokenSymbol: String?) {
