@@ -35,7 +35,7 @@ private suspend fun broadcast() {
     )
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
     for ((chatID, group) in notifications.groupBy { it.chatID }) {
-        val lines = ArrayList<String>()
+        val sections = ArrayList<List<String>>()
         try {
             for (notification in group) {
                 if (!notification.checkValidity()) {
@@ -53,13 +53,13 @@ private suspend fun broadcast() {
                     }
                 }
                 if (matches.isNotEmpty()) {
-                    lines.addAll(createMessage(matches, blocks, notification))
-                    lines.add("-")
+                    sections.add(createMessage(matches, blocks, notification))
                 }
             }
 
-            if(lines.isNotEmpty()) {
-                sendTelegramMessage(chatID, "", lines.joinToString("\n"), false)
+            if(sections.isNotEmpty()) {
+                val message = sections.joinToString("\n-\n") { it.joinToString("\n") }
+                sendTelegramMessage(chatID, "", message, false)
             }
         } catch (e: Throwable) {
             e.printStackTrace()

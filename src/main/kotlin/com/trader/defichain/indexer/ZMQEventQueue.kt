@@ -3,6 +3,9 @@ package com.trader.defichain.indexer
 import com.trader.defichain.db.DBTX
 import com.trader.defichain.db.insertPoolPairs
 import com.trader.defichain.db.insertTX
+import com.trader.defichain.dex.PoolSwap
+import com.trader.defichain.dex.getTokenSymbol
+import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
@@ -13,7 +16,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
-import java.math.BigDecimal
 import java.time.Instant
 import kotlin.coroutines.CoroutineContext
 
@@ -45,14 +47,25 @@ private suspend fun processEvent(event: ZMQEvent) {
 
             val poolPairs = event.poolPairs
             val oraclePrices = event.oraclePrices
-            if(poolPairs != null && oraclePrices != null) {
+            if (poolPairs != null && oraclePrices != null) {
                 val dbtx = DBTX("Tokens, pool pairs and oracle prices at block height ${newBlock.height}")
                 val masterNodeTX = RPC.getMasterNodeTX(newBlock.masterNode)
                 val masterNode = dbtx.insertTX(
                     masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, masterNodeTX.size,
                     isConfirmed = true, valid = true
                 )
-                dbtx.insertPoolPairs(newBlock, masterNode, poolPairs, oraclePrices)
+
+                val usdtPrices = oraclePrices.map {
+                    it.key to testPoolSwap(
+                        PoolSwap(
+                            amountFrom = 1.0,
+                            tokenFrom = getTokenSymbol(it.key),
+                            tokenTo = "USDT",
+                            desiredResult = 1.0,
+                        )
+                    ).estimate
+                }.toMap()
+                dbtx.insertPoolPairs(newBlock, masterNode, poolPairs, usdtPrices)
                 dbtx.submit()
             }
 
