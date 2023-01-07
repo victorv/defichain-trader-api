@@ -3,13 +3,11 @@ package com.trader.defichain.db.search
 import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
 import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.getOraclePriceForSymbol
 import com.trader.defichain.dex.getTokenIdentifiers
 import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.util.SQLValue
 import com.trader.defichain.util.floorPlain
 import com.trader.defichain.util.prepareStatement
-import io.ktor.server.application.*
 import org.intellij.lang.annotations.Language
 import java.sql.ResultSet
 import java.sql.Types
@@ -31,8 +29,8 @@ swaps as (
  from pool_swap
  inner join minted_tx m on m.tx_row_id = pool_swap.tx_row_id
  inner join tx on pool_swap.tx_row_id = tx.row_id
- inner join latest_oracle_price fop on fop.token = token_from
- inner join latest_oracle_price top on top.token = token_to
+ inner join latest_oracle_price fop on fop.token = token_from or (fop.token = 1 AND token_from = 124)
+ inner join latest_oracle_price top on top.token = token_to or (top.token = 1 AND token_to = 124)
  where 
   (:pager_block_height IS NULL or block_height <= :pager_block_height) AND
   pool_swap.tx_row_id <> ANY(:blacklisted) AND
@@ -80,8 +78,8 @@ inner join token tta on tta.dc_token_id=token_to_alt
 inner join address af on af.row_id = "from"
 inner join address at on at.row_id = "to"
 inner join tx on tx.row_id = pool_swap.tx_row_id
-left join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id
-left join block on block.height = minted_tx.block_height 
+inner join minted_tx on minted_tx.tx_row_id = pool_swap.tx_row_id
+inner join block on block.height = minted_tx.block_height 
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
@@ -137,10 +135,6 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwa
                     )
                 }
             }
-        }
-
-        if (poolSwaps.isEmpty()) {
-            return poolSwaps
         }
         return poolSwaps
     }

@@ -2,10 +2,7 @@ package com.trader.defichain.mempool
 
 import com.trader.defichain.db.search.MempoolEntry
 import com.trader.defichain.db.search.PoolSwapRow
-import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.getOraclePrice
-import com.trader.defichain.dex.getTokenSymbol
-import com.trader.defichain.dex.testPoolSwap
+import com.trader.defichain.dex.*
 import com.trader.defichain.http.Message
 import com.trader.defichain.http.connections
 import com.trader.defichain.indexer.calculateFee
@@ -22,6 +19,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import java.math.BigDecimal
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
     val channel = newZMQEventChannel()
@@ -89,12 +87,12 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 }
 
 fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn: Int, time: Long): JsonElement {
-    val description = when {
+    val details = when {
         customTX.isAuctionBid() -> {
             val v = customTX.asAuctionBid()
             val amount = v.amount()
-            val tokenSymbol = getTokenSymbol(amount.second)
-            "${amount.first} $tokenSymbol"
+            val amounts = listOf(amount.first to amount.second)
+            amountsAsString(amounts)
         }
         customTX.isTakeLoan() -> {
             val v = customTX.asTakeLoan()
@@ -114,13 +112,33 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
         }
         customTX.isAddPoolLiquidity() -> {
             val v = customTX.asAddPoolLiquidity()
-            "${abs(v.amountA)} ${getTokenSymbol(v.tokenA)} and ${abs(v.amountB)} ${getTokenSymbol(v.tokenB)}"
+            val amounts = listOf(abs(v.amountA) to v.tokenA, abs(v.amountB) to v.tokenB)
+            amountsAsString(amounts)
         }
         customTX.isRemovePoolLiquidity() -> {
             val v = customTX.asRemovePoolLiquidity()
-            "${abs(v.shares)} ${getTokenSymbol(v.poolID)}"
+            "${abs(v.shares)} ${getTokenSymbol(v.poolID)}" to 0.0
         }
-        else -> ""
+        customTX.isSetOracleData() -> {
+            val v = customTX.asSetOracleData()
+            val prices = if (v == 1) "price" else "prices"
+            "sets $v token $prices" to 0.0
+        }
+        customTX.isAnyAccountsToAccounts() -> {
+            val v = customTX.asAnyAccountsToAccounts()
+            amountsAsString(v)
+        }
+        customTX.isAccountToAccount() -> {
+            val v = customTX.asAccountToAccount()
+            amountsAsString(v)
+        }
+//        customTX.isAccountToUtxos() -> {
+//            amountsAsString(customTX.asAccountToUtxos())
+//        }
+//        customTX.isUtxosToAccount() -> {
+//            amountsAsString(customTX.asUtxosToAccount())
+//        }
+        else -> "" to 0.0
     }
 
     return Json.encodeToJsonElement(
@@ -130,16 +148,29 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
             txn = txn,
             time = time,
             fee = fee,
-            description = description,
+            description = details.first,
+            usdtAmount = details.second,
             details = null
         )
     )
 }
 
-private fun amountsAsString(amounts: List<Pair<Double, Int>>): String {
-    return amounts.joinToString(", ") {
-        "${abs(it.first)} ${getTokenSymbol(it.second)}"
-    }
+private fun amountsAsString(amounts: List<Pair<Double, Int>>): Pair<String, Double> {
+    val usdtAmounts = amounts.map { toUSDT(it) }
+    return usdtAmounts.joinToString(", ") {
+        "$${it.second} ${it.first.tokenFrom}"
+    } to usdtAmounts.maxOf { it.second }
+}
+
+private fun toUSDT(it: Pair<Double, Int>): Pair<PoolSwap, Double> {
+    val swap = PoolSwap(
+        tokenFrom = getTokenSymbol(it.second),
+        amountFrom = abs(it.first),
+        tokenTo = "USDT",
+        desiredResult = 1.0,
+    )
+    val usdt = (testPoolSwap(swap).estimate * 100.0).roundToInt() / 100.0
+    return Pair(swap, usdt)
 }
 
 private fun asSwap(
@@ -188,6 +219,9 @@ private fun asSwap(
         ),
         priceImpact = 0.0,
     )
+
+    val (_, usdtFrom) = toUSDT(swap.fromAmount to getTokenId(row.tokenFrom)!!)
+    val (_, usdtTo) = toUSDT(amountTo to getTokenId(row.tokenTo)!!)
     return Json.encodeToJsonElement(
         ShortDescription(
             type = customTX.type,
@@ -195,8 +229,9 @@ private fun asSwap(
             txn = txn,
             time = time,
             fee = row.fee,
-            description = "${row.amountFrom} ${row.tokenFrom} to ${row.amountTo} ${row.tokenTo}",
+            description = "$$usdtFrom ${row.tokenFrom} to $$usdtTo ${row.tokenTo}",
             details = Json.encodeToJsonElement(row),
+            usdtAmount = usdtFrom,
         )
     )
 }
@@ -207,6 +242,7 @@ data class ShortDescription(
     val fee: String,
     val description: String,
     val blockHeight: Int,
+    val usdtAmount: Double,
     val txn: Int,
     val time: Long,
     val details: JsonElement?
