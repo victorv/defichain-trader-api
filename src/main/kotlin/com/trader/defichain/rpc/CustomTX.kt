@@ -26,6 +26,11 @@ object CustomTX {
         fun isTakeLoan() = type == "TakeLoan"
         fun isPaybackLoan() = type == "PaybackLoan"
         fun isAuctionBid() = type == "AuctionBid"
+        fun isAnyAccountsToAccounts() = type == "AnyAccountsToAccounts"
+        fun isAccountToAccount() = type == "AccountToAccount"
+        fun isAccountToUtxos() = type == "AccountToUtxos"
+        fun isUtxosToAccount() = type == "UtxosToAccount"
+        fun isSetOracleData() = type == "SetOracleData"
 
         fun asPoolSwap() = PoolSwap(
             fromAddress = results.getValue("fromAddress").jsonPrimitive.content,
@@ -71,6 +76,13 @@ object CustomTX {
                 poolID = poolID.toInt(),
                 shares = -nAmount,
             )
+        }
+
+        private fun getAddressAmounts(results: JsonObject): List<Pair<Double, Int>> {
+            return results.entries.map {
+                val (amount, tokenID) = it.value.jsonPrimitive.content.split("@")
+                amount.toDouble() to tokenID.toInt()
+            }
         }
 
         private fun getAmounts(results: JsonObject): List<Pair<Double, Int>> {
@@ -129,6 +141,14 @@ object CustomTX {
             amount = results.getValue("amount").jsonPrimitive.content,
             index = results.getValue("index").jsonPrimitive.int
         )
+
+        fun asSetOracleData() = results.getValue("tokenPrices").jsonArray.size
+
+        fun asAnyAccountsToAccounts(): List<Pair<Double, Int>> = getAddressAmounts(results.getValue("from").jsonObject)
+
+        fun asAccountToAccount(): List<Pair<Double, Int>> = getAddressAmounts(results.getValue("to").jsonObject)
+        fun asUtxosToAccount(): List<Pair<Double, Int>> = getAddressAmounts(results)
+        fun asAccountToUtxos(): List<Pair<Double, Int>> = getAddressAmounts(results.getValue("to").jsonObject)
     }
 
     data class PoolSwap(
