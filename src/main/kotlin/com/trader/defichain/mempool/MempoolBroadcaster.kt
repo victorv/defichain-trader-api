@@ -25,11 +25,13 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
     val channel = newZMQEventChannel()
     var block: Block? = null
     var txn = 0
+    val inMempool = mutableSetOf<String>()
 
     while (coroutineContext.isActive) {
         val event = channel.receive()
         if (event.type == ZMQEventType.HASH_BLOCK) {
             try {
+                inMempool.clear()
                 block = RPC.getValue<Block>(RPCMethod.GET_BLOCK, JsonPrimitive(event.payload), JsonPrimitive(2))
             } catch (e: Throwable) {
                 e.printStackTrace()
@@ -48,6 +50,13 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
                 }
             }
         } else if (event.type == ZMQEventType.RAW_TX && block != null) {
+            if (inMempool.contains(event.payload)) {
+                continue
+            }
+            if (inMempool.size < 2500) {
+                inMempool.add(event.payload)
+            }
+
             val time = System.currentTimeMillis()
 
             try {
@@ -87,6 +96,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 }
 
 fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn: Int, time: Long): JsonElement {
+    var modifiedFee = BigDecimal(fee)
     val details = when {
         customTX.isAuctionBid() -> {
             val v = customTX.asAuctionBid()
@@ -132,12 +142,14 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
             val v = customTX.asAccountToAccount()
             amountsAsString(v)
         }
-//        customTX.isAccountToUtxos() -> {
-//            amountsAsString(customTX.asAccountToUtxos())
-//        }
-//        customTX.isUtxosToAccount() -> {
-//            amountsAsString(customTX.asUtxosToAccount())
-//        }
+        customTX.isAccountToUtxos() -> {
+            val v = customTX.asAccountToUtxos()
+            v.forEach { modifiedFee += BigDecimal(it.first) }
+            amountsAsString(customTX.asAccountToUtxos())
+        }
+        customTX.isUtxosToAccount() -> {
+            amountsAsString(customTX.asUtxosToAccount())
+        }
         else -> "" to 0.0
     }
 
@@ -147,7 +159,7 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
             blockHeight = block.height,
             txn = txn,
             time = time,
-            fee = fee,
+            fee = modifiedFee.floorPlain(),
             description = details.first,
             usdtAmount = details.second,
             details = null
@@ -156,10 +168,22 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
 }
 
 private fun amountsAsString(amounts: List<Pair<Double, Int>>): Pair<String, Double> {
-    val usdtAmounts = amounts.map { toUSDT(it) }
-    return usdtAmounts.joinToString(", ") {
-        "$${it.second} ${it.first.tokenFrom}"
-    } to usdtAmounts.maxOf { it.second }
+    val usdtAmountsByToken = amounts
+        .filter { !hasPool(it.second) }
+        .map {
+            if (hasPool(it.second)) {
+                getTokenSymbol(it.second) to 0.0
+            } else {
+                val (swap, usdt) = toUSDT(it)
+                swap.tokenFrom to usdt
+            }
+        }
+        .groupBy { it.first }
+        .map { it.key to it.value.sumOf { swap -> swap.second } }
+    val usdtSum = usdtAmountsByToken.sumOf { it.second }
+    return usdtAmountsByToken.joinToString(", ") {
+        "$${it.second} ${it.first}"
+    } to (usdtSum * 100.0).roundToInt() / 100.0
 }
 
 private fun toUSDT(it: Pair<Double, Int>): Pair<PoolSwap, Double> {
@@ -221,7 +245,7 @@ private fun asSwap(
     )
 
     val (_, usdtFrom) = toUSDT(swap.fromAmount to getTokenId(row.tokenFrom)!!)
-    val (_, usdtTo) = toUSDT(amountTo to getTokenId(row.tokenTo)!!)
+    val (_, usdtTo) = if (amountTo == 0.0) null to 0.0 else toUSDT(amountTo to getTokenId(row.tokenTo)!!)
     return Json.encodeToJsonElement(
         ShortDescription(
             type = customTX.type,
