@@ -111,7 +111,7 @@ fun Application.configureRouting() {
 
             val filter = call.receive<PoolHistoryFilter>()
             val poolSwaps = getPoolSwaps(filter)
-            if (poolSwaps.isEmpty()) {
+            if (poolSwaps.rows.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, "does not match any records")
                 return@post
             }
