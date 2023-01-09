@@ -22,7 +22,7 @@ data class PoolSwap(
     val estimate: Double? = null,
 ) : AbstractPoolSwap {
     init {
-        check(amountFrom > 0 && amountFrom < 999999999) { "Invalid `amount from`: $amountFrom" }
+        check(amountFrom > 0 && amountFrom < 9999999999) { "Invalid `amount from`: $amountFrom" }
         check(getTokenId(tokenFrom) != null) { "Unable to resolve: $tokenFrom" }
         check(getTokenId(tokenTo) != null) { "Unable to resolve: $tokenTo" }
     }

@@ -13,7 +13,7 @@ import java.sql.ResultSet
 import java.sql.Types
 
 @Language("sql")
-private val template_selectPoolSwaps = """
+private val helpers = """
 with latest_oracle as (
 select token, max(block_height) as block_height from oracle_price group by token
 ),
@@ -25,7 +25,9 @@ swaps as (
  select 
  pool_swap.tx_row_id,
  block_height,
- txn
+ txn,
+ fop.price as price_from,
+ top.price as price_to
  from pool_swap
  inner join minted_tx m on m.tx_row_id = pool_swap.tx_row_id
  inner join tx on pool_swap.tx_row_id = tx.row_id
@@ -50,8 +52,23 @@ swaps as (
   (:to_address_whitelist_is_null = true or "to" = ANY(:to_address_whitelist)) AND
   (:tx_id IS NULL or pool_swap.tx_row_id = :tx_id)
  order by m.block_height DESC, m.txn
- limit 26 offset 0
-)
+
+""".trimIndent()
+
+@Language("sql")
+private val template_stats = """
+$helpers limit 10000)
+select 
+sum(amount_from * price_from),
+sum(amount_to * price_to),
+count(*)
+from pool_swap
+inner join swaps on swaps.tx_row_id = pool_swap.tx_row_id
+"""
+
+@Language("sql")
+private val template_selectPoolSwaps = """
+$helpers limit 26 offset 0)
 select
 tx.dc_tx_id as tx_id,
 minted_tx.block_height, 
@@ -83,7 +100,7 @@ inner join block on block.height = minted_tx.block_height
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
-fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwapRow> {
+fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult {
     connectionPool.connection.use { connection ->
         var pagerBlockHeight: Int? = null
         var blacklist = arrayOf<Long>(-1)
@@ -136,7 +153,33 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): List<PoolSwa
                 }
             }
         }
-        return poolSwaps
+
+        var stats = template_stats
+        stats = stats.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
+        stats = stats.replace(":token_to", DB.toIsAny("token_to", tokensTo))
+
+        connection.prepareStatement(stats, parameters).use { statement ->
+            statement.executeQuery().use { resultSet ->
+
+                if (resultSet.next()) {
+                    val sold = resultSet.getDouble(1)
+                    val bought = resultSet.getDouble(2)
+                    val txCount = resultSet.getInt(3)
+                    return SearchResult(
+                        rows = poolSwaps,
+                        sold = sold,
+                        bought = bought,
+                        txCount = txCount
+                    )
+                }
+            }
+        }
+        return SearchResult(
+            rows = poolSwaps,
+            sold = 0.0,
+            bought = 0.0,
+            txCount = 0
+        )
     }
 }
 
@@ -225,6 +268,13 @@ data class PoolSwapRow(
     val fromAmountUSD: Double,
     val toAmountUSD: Double,
     var priceImpact: Double
+)
+@kotlinx.serialization.Serializable
+data class SearchResult(
+    val rows: List<PoolSwapRow>,
+    val bought: Double,
+    val sold: Double,
+    val txCount: Int,
 )
 
 @kotlinx.serialization.Serializable

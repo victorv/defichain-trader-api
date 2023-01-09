@@ -32,7 +32,7 @@ private suspend fun broadcast() {
             minBlock = blockHeight + 1
         ),
         false
-    )
+    ).rows
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
     for ((chatID, group) in notifications.groupBy { it.chatID }) {
         val sections = ArrayList<List<String>>()
