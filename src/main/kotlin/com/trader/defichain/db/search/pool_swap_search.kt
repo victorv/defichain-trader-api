@@ -57,7 +57,7 @@ swaps as (
 
 @Language("sql")
 private val template_stats = """
-$helpers limit 10000)
+$helpers limit 250)
 select 
 sum(amount_from * price_from),
 sum(amount_to * price_to),
