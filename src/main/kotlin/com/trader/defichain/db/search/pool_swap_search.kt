@@ -140,8 +140,15 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult
 
         val poolSwaps = ArrayList<PoolSwapRow>()
         var sql = if(!limit) template_selectPoolSwaps.replace("limit 26", "limit 250") else template_selectPoolSwaps
-        sql = sql.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
-        sql = sql.replace(":token_to", DB.toIsAny("token_to", tokensTo))
+        if(tokensFrom.size == 1 && filter.toTokenSymbol == "or_same") {
+            val check = "token_from = ${tokensFrom[0]} or token_to = ${tokensFrom[0]}"
+            sql = sql.replace(":token_from", check)
+            sql = sql.replace(":token_to", "NULL is NULL")
+        } else {
+            sql = sql.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
+            sql = sql.replace(":token_to", DB.toIsAny("token_to", tokensTo))
+
+        }
 
         connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
