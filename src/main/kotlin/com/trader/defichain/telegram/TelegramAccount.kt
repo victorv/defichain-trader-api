@@ -99,13 +99,11 @@ data class PoolHistoryNotification(
 
     override suspend fun matches(value: Any): Boolean {
         if (value is PoolSwapRow) {
-            println(filter.fromTokenSymbol)
-            println(filter.toTokenSymbol)
             if(filter.fromTokenSymbol != null && filter.toTokenSymbol == "is_sold_or_bought") {
                 val tokenFrom = getTokenId(value.tokenFrom)
                 val tokenTo = getTokenId(value.tokenTo)
                 val whitelist = getTokenIdentifiers(filter.fromTokenSymbol)
-                println("$tokenFrom $tokenTo ${whitelist.contentToString()}")
+
                 if (whitelist.isNotEmpty() && !(whitelist.contains(tokenFrom) || whitelist.contains(tokenTo))) {
                     return false
                 }
