@@ -124,7 +124,7 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult
 
         val poolSwaps = ArrayList<PoolSwapRow>()
         var sql = if(!limit) template_selectPoolSwaps.replace("limit 26", "limit 250") else template_selectPoolSwaps
-        if(tokensFrom.size == 1 && filter.toTokenSymbol == "or_same") {
+        if(tokensFrom.size == 1 && filter.toTokenSymbol == "is_sold_or_bought") {
             val check = "token_from = ${tokensFrom[0]} or token_to = ${tokensFrom[0]}"
             sql = sql.replace(":token_from", check)
             sql = sql.replace(":token_to", "NULL is NULL")
