@@ -5,21 +5,23 @@ import com.trader.defichain.db.search.PoolSwapRow
 import com.trader.defichain.db.search.getPoolSwaps
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
-import kotlinx.coroutines.delay
+import com.trader.defichain.zmq.newZQMBlockChannel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
-import java.util.TreeSet
+import java.util.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 private var blockHeight = runBlocking { RPC.getValue<Int>(RPCMethod.GET_BLOCK_COUNT) }
+private val blockChannel = newZQMBlockChannel()
 private const val matchLimit = 10
 
 suspend fun notifyTelegramSubscribers(coroutineContext: CoroutineContext) {
     while (coroutineContext.isActive) {
         try {
             broadcast()
+            blockChannel.receive()
         } catch (e: Throwable) {
             e.printStackTrace()
         }
@@ -64,10 +66,6 @@ private suspend fun broadcast() {
         } catch (e: Throwable) {
             e.printStackTrace()
         }
-    }
-
-    if (blockHeight == newBlockHeight) {
-        delay(5000)
     }
     blockHeight = newBlockHeight
 }

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlin.coroutines.CoroutineContext
 
-val blockChannel = newZQMBlockChannel()
+private val blockChannel = newZQMBlockChannel()
 
 suspend fun broadcastDEX(coroutineContext: CoroutineContext) {
     while (coroutineContext.isActive) {
