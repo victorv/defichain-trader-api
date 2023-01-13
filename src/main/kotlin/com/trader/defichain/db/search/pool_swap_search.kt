@@ -174,30 +174,33 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
     val amountFrom = resultSet.getBigDecimal(5)
     val amountTo = resultSet.getBigDecimal(6)
 
-    val usdtSwap = if(amountFrom.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = amountFrom.toDouble(),
+    val vAmountFrom = amountFrom.toDouble()
+    val vAmountTo = amountTo.toDouble()
+
+    val usdtSwap = if(vAmountFrom == 0.0) null else testPoolSwap(PoolSwap(
+        amountFrom = vAmountFrom,
         tokenFrom = tokenFrom,
         tokenTo = "USDT",
         desiredResult = 1.0,
     ))
-    val usdtInverseSwap = if(amountTo.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = amountTo.toDouble(),
+    val usdtInverseSwap = if(vAmountTo == 0.0) null else testPoolSwap(PoolSwap(
+        amountFrom = vAmountTo,
         tokenFrom = tokenTo,
         tokenTo = "USDT",
         desiredResult = 1.0,
     ))
 
-    val swap = if(amountFrom.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = amountFrom.toDouble(),
+    val swap = if(vAmountTo == 0.0 || vAmountFrom == 0.0) null else testPoolSwap(PoolSwap(
+        amountFrom = vAmountFrom,
         tokenFrom = tokenFrom,
         tokenTo = tokenTo,
-        desiredResult = amountTo.toDouble(),
+        desiredResult = vAmountTo,
     ))
-    val inverseSwap = if(amountTo.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = amountTo.toDouble(),
+    val inverseSwap = if(vAmountTo == 0.0 || vAmountFrom == 0.0) null else testPoolSwap(PoolSwap(
+        amountFrom = vAmountTo,
         tokenFrom = tokenTo,
         tokenTo = tokenFrom,
-        desiredResult = amountFrom.toDouble(),
+        desiredResult = vAmountFrom,
     ))
 
     return PoolSwapRow(
