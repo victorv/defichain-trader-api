@@ -11,6 +11,7 @@ import com.trader.defichain.plugins.configureContentNegotiation
 import com.trader.defichain.plugins.configureRouting
 import com.trader.defichain.plugins.configureWebsockets
 import com.trader.defichain.telegram.approveNewNotifications
+import com.trader.defichain.telegram.broadcastTelegramMessages
 import com.trader.defichain.telegram.loadNotifications
 import com.trader.defichain.telegram.notifyTelegramSubscribers
 import com.trader.defichain.zmq.receiveFullNodeEvents
@@ -45,6 +46,11 @@ fun main(vararg args: String) {
     if (appServerConfig.production) {
         if(!appServerConfig.local) {
             println("Launching Telegram account authenticator")
+
+            GlobalScope.launch {
+                broadcastTelegramMessages(coroutineContext)
+            }
+
             GlobalScope.launch {
                 approveNewNotifications(coroutineContext)
             }

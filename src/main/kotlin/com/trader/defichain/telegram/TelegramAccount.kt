@@ -9,6 +9,7 @@ import com.trader.defichain.http.connections
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -18,6 +19,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.name
 
 val notifications = CopyOnWriteArrayList<Notification>()
+private val logger = LoggerFactory.getLogger("telegram")
 
 fun loadNotifications() {
     Files.list(Paths.get(appServerConfig.accountsRoot)).forEach {
@@ -27,7 +29,7 @@ fun loadNotifications() {
             notifications += notification
         }
     }
-    println("Loaded ${notifications.size} notifications")
+    logger.info("Loaded ${notifications.size} notifications")
 }
 
 suspend fun approveNotification(uuid: String, chatID: Long) {
@@ -39,6 +41,9 @@ suspend fun approveNotification(uuid: String, chatID: Long) {
             if (notification.checkValidity()) {
                 notification.write()
                 notifications += notification
+
+                logger.info("approved alert: $notification")
+
                 sendTelegramMessage(
                     chatID,
                     notification.uuid,

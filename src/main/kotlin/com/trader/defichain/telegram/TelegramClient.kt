@@ -8,9 +8,39 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.*
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
+import org.slf4j.LoggerFactory
+import kotlin.coroutines.CoroutineContext
+
+private val messageQueue = Channel<JsonObject>(900, BufferOverflow.DROP_OLDEST)
+private const val messagingRate = 1000L / 30L
+private val logger = LoggerFactory.getLogger("telegram")
+
+suspend fun broadcastTelegramMessages(coroutineContext: CoroutineContext) {
+    while (coroutineContext.isActive) {
+        val message = messageQueue.receive()
+        try {
+            val chatID = message["chat_id"].toString()
+
+            val url =
+                appServerConfig.telegramBot.createURL("")
+            telegramClient.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(message)
+            }
+
+            logger.info("send alert to $chatID")
+        } catch (e: Throwable) {
+            logger.error("failed to send alert $message", e)
+        } finally {
+            delay(messagingRate)
+        }
+    }
+}
 
 suspend fun sendTelegramMessage(chatId: Long, uuid: String, text: String, includeReplyMarkup: Boolean = true) {
     val keyboard = JsonObject(
@@ -43,12 +73,7 @@ suspend fun sendTelegramMessage(chatId: Long, uuid: String, text: String, includ
         properties["reply_markup"] = keyboard
     }
 
-    val url =
-        appServerConfig.telegramBot.createURL("")
-    telegramClient.post(url) {
-        contentType(ContentType.Application.Json)
-        setBody(JsonObject(properties))
-    }
+    messageQueue.send(JsonObject(properties))
 }
 
 suspend fun getTelegramUpdates(offset: Long): TelegramUpdates {

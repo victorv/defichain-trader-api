@@ -8,6 +8,7 @@ import com.trader.defichain.rpc.RPCMethod
 import com.trader.defichain.zmq.newZQMBlockChannel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.min
@@ -15,15 +16,17 @@ import kotlin.math.roundToInt
 
 private var blockHeight = runBlocking { RPC.getValue<Int>(RPCMethod.GET_BLOCK_COUNT) }
 private val blockChannel = newZQMBlockChannel()
+private val logger = LoggerFactory.getLogger("telegram")
 private const val matchLimit = 10
 
 suspend fun notifyTelegramSubscribers(coroutineContext: CoroutineContext) {
     while (coroutineContext.isActive) {
         try {
             broadcast()
-            blockChannel.receive()
         } catch (e: Throwable) {
-            e.printStackTrace()
+            logger.error("error while testing notifications", e)
+        } finally {
+            blockChannel.receive()
         }
     }
 }
@@ -36,6 +39,7 @@ private suspend fun broadcast() {
         false
     ).rows
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
+    var sentCount = 0
     for ((chatID, group) in notifications.groupBy { it.chatID }) {
         val sections = ArrayList<List<String>>()
         try {
@@ -51,7 +55,7 @@ private suspend fun broadcast() {
 
                     if (notification.matches(row)) {
                         matches.add(row)
-                        blocks += row.block!!.blockHeight
+                        blocks += row.block.blockHeight
                     }
                 }
                 if (matches.isNotEmpty()) {
@@ -62,11 +66,14 @@ private suspend fun broadcast() {
             if(sections.isNotEmpty()) {
                 val message = sections.joinToString("\n-\n") { it.joinToString("\n") }
                 sendTelegramMessage(chatID, "", message, false)
+                sentCount++
             }
         } catch (e: Throwable) {
-            e.printStackTrace()
+            logger.error("error while testing notifications of $chatID", e)
         }
     }
+    logger.info("tested ${notifications.size} against ${rows.size} results in block range [$blockHeight - $newBlockHeight] resulting in $sentCount scheduled alerts")
+
     blockHeight = newBlockHeight
 }
 
