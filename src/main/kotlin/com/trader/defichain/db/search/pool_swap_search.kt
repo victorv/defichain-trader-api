@@ -3,6 +3,7 @@ package com.trader.defichain.db.search
 import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
 import com.trader.defichain.dex.PoolSwap
+import com.trader.defichain.dex.SwapResult
 import com.trader.defichain.dex.getTokenIdentifiers
 import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.util.SQLValue
@@ -210,18 +211,31 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
     val amountFrom = resultSet.getBigDecimal(5)
     val amountTo = resultSet.getBigDecimal(6)
 
-    val fromAmountUSD = if(amountFrom.toDouble() == 0.0) 0.0 else testPoolSwap(PoolSwap(
+    val usdtSwap = if(amountFrom.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
         amountFrom = amountFrom.toDouble(),
         tokenFrom = tokenFrom,
         tokenTo = "USDT",
         desiredResult = 1.0,
-    )).estimate
-    val toAmountUSD = if(amountTo.toDouble() == 0.0) 0.0 else testPoolSwap(PoolSwap(
+    ))
+    val usdtInverseSwap = if(amountTo.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
         amountFrom = amountTo.toDouble(),
         tokenFrom = tokenTo,
         tokenTo = "USDT",
         desiredResult = 1.0,
-    )).estimate
+    ))
+
+    val swap = if(amountFrom.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
+        amountFrom = amountFrom.toDouble(),
+        tokenFrom = tokenFrom,
+        tokenTo = tokenTo,
+        desiredResult = amountTo.toDouble(),
+    ))
+    val inverseSwap = if(amountTo.toDouble() == 0.0) null else testPoolSwap(PoolSwap(
+        amountFrom = amountTo.toDouble(),
+        tokenFrom = tokenTo,
+        tokenTo = tokenFrom,
+        desiredResult = amountFrom.toDouble(),
+    ))
 
     return PoolSwapRow(
         txID = resultSet.getString(1),
@@ -237,9 +251,13 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
         mempool = mempoolEntry,
         tokenToAlt = resultSet.getString(15),
         id = resultSet.getLong(16),
-        fromAmountUSD = if (tokenFrom == "USDT") amountFrom.toDouble() else fromAmountUSD,
-        toAmountUSD = if (tokenTo == "USDT") amountTo.toDouble() else toAmountUSD,
+        usdtSwap = usdtSwap,
+        usdtInverseSwap = usdtInverseSwap,
+        swap = swap,
+        inverseSwap = inverseSwap,
         priceImpact = 0.0,
+        fromAmountUSD = usdtSwap?.estimate ?: 0.0,
+        toAmountUSD = usdtInverseSwap?.estimate ?: 0.0,
     )
 }
 
@@ -272,9 +290,13 @@ data class PoolSwapRow(
     val mempool: MempoolEntry?,
     val tokenToAlt: String,
     val id: Long,
+    val usdtSwap: SwapResult? = null,
+    val usdtInverseSwap: SwapResult? = null,
+    val swap: SwapResult? = null,
+    val inverseSwap: SwapResult? = null,
+    var priceImpact: Double,
     val fromAmountUSD: Double,
-    val toAmountUSD: Double,
-    var priceImpact: Double
+    val toAmountUSD: Double
 )
 @kotlinx.serialization.Serializable
 data class SearchResult(
