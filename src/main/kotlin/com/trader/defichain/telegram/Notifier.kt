@@ -5,7 +5,7 @@ import com.trader.defichain.db.search.PoolSwapRow
 import com.trader.defichain.db.search.getPoolSwaps
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
-import com.trader.defichain.zmq.newZQMBlockChannel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
@@ -15,7 +15,6 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 private var blockHeight = runBlocking { RPC.getValue<Int>(RPCMethod.GET_BLOCK_COUNT) }
-private val blockChannel = newZQMBlockChannel()
 private val logger = LoggerFactory.getLogger("telegram")
 private const val matchLimit = 10
 
@@ -26,7 +25,7 @@ suspend fun notifyTelegramSubscribers(coroutineContext: CoroutineContext) {
         } catch (e: Throwable) {
             logger.error("error while testing notifications", e)
         } finally {
-            blockChannel.receive()
+            delay(3000)
         }
     }
 }
