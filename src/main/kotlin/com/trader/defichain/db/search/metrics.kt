@@ -150,8 +150,8 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): Graph {
         }
     }
 
-    val swapResult = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first()
-    for (swap in swapResults) {
+    val swapResult = testPoolSwap(poolSwap)
+    for (swap in swapResult.breakdown) {
         val estimate = swap.estimate
         val builder = graphBuilders.getValue(swap.path)
         val previousTime = builder.previousTime
@@ -162,7 +162,7 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): Graph {
     }
 
     val series = graphBuilders.map { it.value.series }
-    return Graph(swapResult, series)
+    return Graph(swapResult, series, density)
 }
 
 data class GraphBuilder(
@@ -174,7 +174,8 @@ data class GraphBuilder(
 @kotlinx.serialization.Serializable
 data class Graph(
     val swap: SwapResult,
-    val series: List<Series>
+    val series: List<Series>,
+    val density: Double,
 )
 
 @kotlinx.serialization.Serializable
