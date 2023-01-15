@@ -7,7 +7,6 @@ import com.trader.defichain.db.search.getMetrics
 import com.trader.defichain.db.search.getPoolSwaps
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
-import com.trader.defichain.telegram.notifications
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
@@ -91,8 +90,8 @@ fun Application.configureRouting() {
         get("/graph") {
             val poolSwap = extractPoolSwap(call) ?: return@get call.respond(BadRequest("?poolSwap=... is missing"))
             val blocks = call.request.queryParameters["blocks"] ?: return@get call.respond(BadRequest("?blocks=... is missing"))
-            val metrics = getMetrics(poolSwap, blocks.toInt())
-            call.respond(metrics)
+            val graph = getMetrics(poolSwap, blocks.toInt())
+            call.respond(graph)
         }
         get("/poolpairs") {
             val response = getCachedPoolPairs()

@@ -46,7 +46,8 @@ data class PathBreakdown(
     val tradeEnabled: Boolean,
     val overflow: Boolean,
     val price: Double?,
-    val premium: Double?
+    val premium: Double?,
+    val path: Int
 ) {
     fun isBad() = overflow || !status || !tradeEnabled
 }

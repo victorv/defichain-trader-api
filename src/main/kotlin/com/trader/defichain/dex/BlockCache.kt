@@ -158,6 +158,7 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
             val premium = if (oraclePrice == null || price == null) null else 100.0 / oraclePrice * price - 100.0
             allPathsExplained.add(
                 PathBreakdown(
+                    path = path.hashCode(),
                     price = price,
                     premium = premium,
                     overflow = estimate < 0.0,

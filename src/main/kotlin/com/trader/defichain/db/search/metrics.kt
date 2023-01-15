@@ -5,16 +5,16 @@ import com.trader.defichain.dex.*
 import com.trader.defichain.util.get
 import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
-import java.time.*
-import kotlin.math.max
+import kotlin.math.abs
 import kotlin.math.min
 
-private val UTC = ZoneId.of("UTC")
-
 private const val oneHour = 120
+private const val twelveHours = oneHour * 12
 private const val oneDay = oneHour * 24
 private const val fiveDays = oneDay * 5
-private const val threeMonths = oneDay * 31 * 3
+private const val oneMonth = oneDay * 31
+private const val twoMonths = oneMonth * 2
+private const val threeMonths = oneMonth * 3
 
 @Language("sql")
 private val template_poolPairs = """
@@ -39,13 +39,23 @@ where pool_pair.block_height >= (select max(block.height) - :block_count from bl
 order by pool_pair.block_height DESC     
 """.trimIndent()
 
-fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> {
+fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): Graph {
     val poolPairUpdates = mutableMapOf<Int, MutableMap<Int, PoolPair>>()
     val uniquePoolIdentifiers = getSwapPaths(poolSwap).flatten().toSet().toTypedArray()
 
     val blockTimes = mutableMapOf<Int, Long>()
     var minBlockHeight = Integer.MAX_VALUE
     var maxBlockHeight = Integer.MIN_VALUE
+
+    val density = when {
+        blockCount <= twelveHours -> 0.0001
+        blockCount <= oneDay -> 0.0005
+        blockCount <= fiveDays -> 0.001
+        blockCount <= oneMonth -> 0.0025
+        blockCount <= twoMonths -> 0.005
+        blockCount <= threeMonths -> 0.0075
+        else -> 0.001
+    }
 
     connectionPool.connection.use { connection ->
         val poolIDArray = connection.createArrayOf("INT", uniquePoolIdentifiers)
@@ -112,75 +122,77 @@ fun getMetrics(poolSwap: AbstractPoolSwap, blockCount: Int): List<List<Double>> 
         minBlockHeight++
     }
 
-    val byTime = HashMap<Long, CandleStick>()
+    val swapResults = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().breakdown
+    val graphBuilders = swapResults.associate { it.path to GraphBuilder(Series(it)) }
+
     for (height in minBlockHeight..maxBlockHeight) {
-
-
         val poolPairsAtHeight = poolPairUpdates[height] ?: continue
         for ((poolID, poolPair) in poolPairsAtHeight) {
             poolPairs[poolID] = poolPair
         }
-
-        val estimate = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().estimate
+        val swapResults = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first().breakdown
 
         val time = blockTimes.getValue(height)
-        val roundedTime = roundToFitTimeline(time, blockCount)
-        val current = byTime[roundedTime]
-        if (current == null) {
-            byTime[roundedTime] = CandleStick(
-                o = estimate,
-                l = estimate,
-                c = estimate,
-                h = estimate,
-                blockHeight = height,
-                minTime = time,
-                maxTime = time,
-                roundedTime = roundedTime
-            )
-        } else {
-            val o = if (time < current.minTime) estimate else current.o
-            val c = if (time > current.maxTime) estimate else current.c
-            val l = min(current.l, estimate)
-            val h = max(current.h, estimate)
-            byTime[roundedTime] = CandleStick(
-                o = o,
-                c = c,
-                h = h,
-                l = l,
-                blockHeight = height,
-                minTime = min(time, current.minTime),
-                maxTime = max(time, current.maxTime),
-                roundedTime = roundedTime
-            )
+
+        for (swap in swapResults) {
+            val estimate = swap.estimate
+            val builder = graphBuilders.getValue(swap.path)
+            val previousEstimate = builder.previousEstimate
+            val previousTime = builder.previousTime
+
+            val uniqueTime = if (time == previousTime) time + 1 else time
+
+            if (abs(previousEstimate - estimate) > previousEstimate * density) {
+                builder.series.points.add(Point(estimate, uniqueTime))
+                builder.previousEstimate = estimate
+                builder.previousTime = uniqueTime
+            }
         }
     }
-    return byTime.values.sortedBy { it.roundedTime }.map {
-        listOf(it.o, it.c, it.l, it.h, it.roundedTime.toDouble(), it.blockHeight.toDouble())
+
+    val swapResult = executeSwaps(listOf(poolSwap), poolPairs, true).swapResults.first()
+    for (swap in swapResults) {
+        val estimate = swap.estimate
+        val builder = graphBuilders.getValue(swap.path)
+        val previousTime = builder.previousTime
+
+        val time = System.currentTimeMillis() / 1000
+        val uniqueTime = if (time == previousTime) time + 1 else time
+        builder.series.points.add(Point(estimate, uniqueTime))
+    }
+
+    val series = graphBuilders.map { it.value.series }
+    return Graph(swapResult, series)
+}
+
+data class GraphBuilder(
+    val series: Series,
+    var previousEstimate: Double = 0.0,
+    var previousTime: Long = 0,
+)
+
+@kotlinx.serialization.Serializable
+data class Graph(
+    val swap: SwapResult,
+    val series: List<Series>
+)
+
+@kotlinx.serialization.Serializable
+data class Series(
+    val swap: PathBreakdown,
+    val points: MutableList<Point> = mutableListOf(),
+)
+
+@kotlinx.serialization.Serializable
+data class Point(
+    val value: Double,
+    val time: Long,
+) {
+    override fun equals(o: Any?): Boolean {
+        return o is Point && o.value == value
+    }
+
+    override fun hashCode(): Int {
+        return value.hashCode()
     }
 }
-
-private fun roundToFitTimeline(time: Long, blockCount: Int): Long {
-    val dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(time * 1000), UTC)
-    return when {
-        blockCount <= oneHour -> dateTime
-        blockCount <= fiveDays -> LocalDateTime.of(
-            dateTime.toLocalDate(),
-            LocalTime.of(dateTime.hour, 0)
-        )
-        else -> LocalDateTime.of(
-            dateTime.toLocalDate(),
-            LocalTime.of(0, 0)
-        )
-    }.toInstant(ZoneOffset.UTC).toEpochMilli()
-}
-
-data class CandleStick(
-    val o: Double,
-    val c: Double,
-    val h: Double,
-    val l: Double,
-    val blockHeight: Int,
-    val roundedTime: Long,
-    val maxTime: Long,
-    val minTime: Long,
-)
