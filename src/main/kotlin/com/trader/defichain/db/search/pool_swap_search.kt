@@ -12,6 +12,9 @@ import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
 import java.sql.ResultSet
 import java.sql.Types
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @Language("sql")
 private val template_selectPoolSwaps = """
@@ -85,6 +88,8 @@ left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
 fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
+    val  dateTimeFormat = DateTimeFormatter.ofPattern("MM/dd/yy hh:mm:ss")
+
     val swaps = getPoolSwaps(filter, DataType.CSV, 5000).rows
     val csv = java.lang.StringBuilder()
     csv.append("block")
@@ -93,7 +98,7 @@ fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
     csv.append("txn")
     csv.append(',')
 
-    csv.append("median_time")
+    csv.append("median_block_time_utc")
     csv.append(',')
 
     csv.append("tx_id")
@@ -125,7 +130,9 @@ fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
         csv.append(swap.block?.txn ?: -1)
         csv.append(',')
 
-        csv.append(swap.block?.medianTime)
+        val medianTime = swap.block?.medianTime ?: 0
+        val dateTime = LocalDateTime.ofEpochSecond(medianTime, 0, ZoneOffset.UTC)
+        csv.append(dateTimeFormat.format(dateTime))
         csv.append(',')
 
         csv.append(swap.txID)
