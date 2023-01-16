@@ -89,8 +89,9 @@ fun Application.configureRouting() {
         }
         get("/graph") {
             val poolSwap = extractPoolSwap(call) ?: return@get call.respond(BadRequest("?poolSwap=... is missing"))
-            val blocks = call.request.queryParameters["blocks"] ?: return@get call.respond(BadRequest("?blocks=... is missing"))
-            val graph = getMetrics(poolSwap, blocks.toInt())
+            val time = call.request.queryParameters["time"] ?: return@get call.respond(BadRequest("?time=... is missing"))
+            val path = call.request.queryParameters["path"] ?: return@get call.respond(BadRequest("?path=... is missing"))
+            val graph = getMetrics(poolSwap, time.toLong(), path.toInt())
             call.respond(graph)
         }
         get("/poolpairs") {
