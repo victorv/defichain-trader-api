@@ -88,7 +88,7 @@ left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
 fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
-    val  dateTimeFormat = DateTimeFormatter.ofPattern("MM/dd/yy hh:mm:ss")
+    val  dateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")
 
     val swaps = getPoolSwaps(filter, DataType.CSV, 5000).rows
     val csv = java.lang.StringBuilder()
