@@ -99,7 +99,7 @@ fun getPoolID(tokenA: Int, tokenB: Int): Int {
         .key
 }
 
-fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>, forceBestPath: Boolean): DexResult {
+fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>, paths: List<List<Int>>, forceBestPath: Boolean): DexResult {
     var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()
     val swapResults = ArrayList<SwapResult>()
 
@@ -113,7 +113,6 @@ fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair
 
         val allPathsExplained = mutableListOf<PathBreakdown>()
 
-        val paths = getSwapPaths(poolSwap)
         var bestResult = BigDecimal(0)
         var poolsAfterBestSwap = poolsForAllSwaps
         for (path in paths) {

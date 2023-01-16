@@ -34,7 +34,10 @@ order by pool_pair.block_height DESC
 
 fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<List<Double>> {
 
-    val poolIdentifiers = getSwapPaths(poolSwap).first { it.hashCode() == path }.toTypedArray()
+    val swapPath = getSwapPaths(poolSwap).first { it.hashCode() == path }
+    val swapPaths = listOf(swapPath)
+    val poolIdentifiers = swapPath.toTypedArray()
+
     val byTime = HashMap<Long, CandleStick>()
 
     connectionPool.connection.use { connection ->
@@ -45,7 +48,9 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
         )
 
         val poolPairs = mutableMapOf<Int, PoolPair>()
-        poolPairs.putAll(getAllPools())
+        for (poolID in swapPath) {
+            poolPairs[poolID] = getPool(poolID)
+        }
 
         connection.prepareStatement(template_poolPairs, params).use { statement ->
 
@@ -62,10 +67,10 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                         tradeEnabled = livePoolPair.tradeEnabled,
                         reserveA = resultSet.get("reserve_a"),
                         reserveB = resultSet.get("reserve_b"),
-                        dexFeeInPctTokenA = resultSet.get("in_a"),
-                        dexFeeOutPctTokenA = resultSet.get("out_a"),
-                        dexFeeInPctTokenB = resultSet.get("in_b"),
-                        dexFeeOutPctTokenB = resultSet.get("out_b"),
+                        dexFeeInPctTokenA = livePoolPair.dexFeeInPctTokenA,//resultSet.get("in_a"),
+                        dexFeeOutPctTokenA = livePoolPair.dexFeeOutPctTokenA,//resultSet.get("out_a"),
+                        dexFeeInPctTokenB = livePoolPair.dexFeeInPctTokenB,//resultSet.get("in_b"),
+                        dexFeeOutPctTokenB = livePoolPair.dexFeeOutPctTokenB,//resultSet.get("out_b"),
                         commission = resultSet.getDouble("commission"),
                     )
 
@@ -78,15 +83,21 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                     val roundedTime = time - (time % candleTime)
                     poolPairs[poolID] = newPoolPair
 
-                    val estimate = executeSwaps(
+                    val r = executeSwaps(
                         listOf(poolSwap),
                         poolPairs,
+                        swapPaths,
                         true
                     ).swapResults
+
+                    val estimate = r
                         .first()
                         .breakdown
                         .first { it.path == path }
                         .estimate
+               //     println("${r.first().estimate} ${newPoolPair.reserveA / newPoolPair.reserveB}")
+
+//                    println(r)
 
                     val current = byTime[roundedTime]
                     if (current == null) {
