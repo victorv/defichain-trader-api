@@ -1,5 +1,6 @@
 package com.trader.defichain.telegram
 
+import com.trader.defichain.db.search.DataType
 import com.trader.defichain.db.search.PoolHistoryFilter
 import com.trader.defichain.db.search.PoolSwapRow
 import com.trader.defichain.db.search.getPoolSwaps
@@ -35,7 +36,8 @@ private suspend fun broadcast() {
         PoolHistoryFilter(
             minBlock = blockHeight + 1
         ),
-        false
+        DataType.LIST,
+        500
     ).rows
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
     var sentCount = 0

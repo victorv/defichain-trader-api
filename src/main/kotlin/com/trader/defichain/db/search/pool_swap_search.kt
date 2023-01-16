@@ -84,7 +84,75 @@ inner join block on block.height = minted_tx.block_height
 left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
-fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult {
+fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
+    val swaps = getPoolSwaps(filter, DataType.CSV, 5000).rows
+    val csv = java.lang.StringBuilder()
+    csv.append("block")
+    csv.append(',')
+
+    csv.append("txn")
+    csv.append(',')
+
+    csv.append("median_time")
+    csv.append(',')
+
+    csv.append("tx_id")
+    csv.append(',')
+
+    csv.append("amount_from")
+    csv.append(',')
+
+    csv.append("token_from")
+    csv.append(',')
+
+    csv.append("amount_to")
+    csv.append(',')
+
+    csv.append("token_to")
+    csv.append(',')
+
+    csv.append("fee")
+    csv.append(',')
+
+    csv.append("max_price")
+    csv.append(',')
+    csv.append('\n')
+
+    for(swap in swaps) {
+        csv.append(swap.block?.blockHeight ?: -1)
+        csv.append(',')
+
+        csv.append(swap.block?.txn ?: -1)
+        csv.append(',')
+
+        csv.append(swap.block?.medianTime)
+        csv.append(',')
+
+        csv.append(swap.txID)
+        csv.append(',')
+
+        csv.append(swap.amountFrom)
+        csv.append(',')
+
+        csv.append(swap.tokenFrom)
+        csv.append(',')
+
+        csv.append(swap.amountTo)
+        csv.append(',')
+
+        csv.append(swap.tokenTo)
+        csv.append(',')
+
+        csv.append(swap.fee)
+        csv.append(',')
+
+        csv.append(swap.maxPrice)
+        csv.append('\n')
+    }
+    return csv.toString()
+}
+
+fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): SearchResult {
     connectionPool.connection.use { connection ->
         var pagerBlockHeight: Int? = null
         var blacklist = arrayOf<Long>(-1)
@@ -123,15 +191,14 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult
         )
 
         val poolSwaps = ArrayList<PoolSwapRow>()
-        var sql = if(!limit) template_selectPoolSwaps.replace("limit 26", "limit 250") else template_selectPoolSwaps
-        if(tokensFrom.size == 1 && filter.toTokenSymbol == "is_sold_or_bought") {
+        var sql = template_selectPoolSwaps.replace("limit 26", "limit $limit")
+        if (tokensFrom.size == 1 && filter.toTokenSymbol == "is_sold_or_bought") {
             val check = "token_from = ${tokensFrom[0]} or token_to = ${tokensFrom[0]}"
             sql = sql.replace(":token_from", check)
             sql = sql.replace(":token_to", "NULL is NULL")
         } else {
             sql = sql.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
             sql = sql.replace(":token_to", DB.toIsAny("token_to", tokensTo))
-
         }
 
         connection.prepareStatement(sql, parameters).use { statement ->
@@ -139,7 +206,7 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult
 
                 while (resultSet.next()) {
                     poolSwaps.add(
-                        getPoolSwapRow(resultSet)
+                        getPoolSwapRow(resultSet, dataType)
                     )
                 }
             }
@@ -154,7 +221,7 @@ fun getPoolSwaps(filter: PoolHistoryFilter, limit: Boolean = true): SearchResult
     }
 }
 
-private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
+private fun getPoolSwapRow(resultSet: ResultSet, dataType: DataType): PoolSwapRow {
     val blockHeight = resultSet.getObject(2)
     val blockEntry = if (blockHeight == null) null else BlockEntry(
         blockHeight = blockHeight as Int,
@@ -177,31 +244,43 @@ private fun getPoolSwapRow(resultSet: ResultSet): PoolSwapRow {
     val vAmountFrom = amountFrom.toDouble()
     val vAmountTo = amountTo.toDouble()
 
-    val usdtSwap = if(vAmountFrom == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = vAmountFrom,
-        tokenFrom = tokenFrom,
-        tokenTo = "USDT",
-        desiredResult = 1.0,
-    ))
-    val usdtInverseSwap = if(vAmountTo == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = vAmountTo,
-        tokenFrom = tokenTo,
-        tokenTo = "USDT",
-        desiredResult = 1.0,
-    ))
+    val usdtSwap = if (vAmountFrom == 0.0 || dataType == DataType.CSV) null
+    else testPoolSwap(
+        PoolSwap(
+            amountFrom = vAmountFrom,
+            tokenFrom = tokenFrom,
+            tokenTo = "USDT",
+            desiredResult = 1.0,
+        )
+    )
+    val usdtInverseSwap = if (vAmountTo == 0.0 || dataType == DataType.CSV) null
+    else testPoolSwap(
+        PoolSwap(
+            amountFrom = vAmountTo,
+            tokenFrom = tokenTo,
+            tokenTo = "USDT",
+            desiredResult = 1.0,
+        )
+    )
 
-    val swap = if(vAmountTo == 0.0 || vAmountFrom == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = vAmountFrom,
-        tokenFrom = tokenFrom,
-        tokenTo = tokenTo,
-        desiredResult = vAmountTo,
-    ))
-    val inverseSwap = if(vAmountTo == 0.0 || vAmountFrom == 0.0) null else testPoolSwap(PoolSwap(
-        amountFrom = vAmountTo,
-        tokenFrom = tokenTo,
-        tokenTo = tokenFrom,
-        desiredResult = vAmountFrom,
-    ))
+    val swap = if (vAmountTo == 0.0 || vAmountFrom == 0.0 || dataType == DataType.CSV) null
+    else testPoolSwap(
+        PoolSwap(
+            amountFrom = vAmountFrom,
+            tokenFrom = tokenFrom,
+            tokenTo = tokenTo,
+            desiredResult = vAmountTo,
+        )
+    )
+    val inverseSwap = if (vAmountTo == 0.0 || vAmountFrom == 0.0 || dataType == DataType.CSV) null
+    else testPoolSwap(
+        PoolSwap(
+            amountFrom = vAmountTo,
+            tokenFrom = tokenTo,
+            tokenTo = tokenFrom,
+            desiredResult = vAmountFrom,
+        )
+    )
 
     return PoolSwapRow(
         txID = resultSet.getString(1),
@@ -264,6 +343,7 @@ data class PoolSwapRow(
     val fromAmountUSD: Double,
     val toAmountUSD: Double
 )
+
 @kotlinx.serialization.Serializable
 data class SearchResult(
     val rows: List<PoolSwapRow>,
@@ -311,4 +391,9 @@ data class PoolHistoryFilter(
         checkTokenSymbol(fromTokenSymbol)
         checkTokenSymbol(toTokenSymbol)
     }
+}
+
+enum class DataType {
+    CSV,
+    LIST
 }

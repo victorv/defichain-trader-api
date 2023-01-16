@@ -2,9 +2,7 @@ package com.trader.defichain.plugins
 
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.DB
-import com.trader.defichain.db.search.PoolHistoryFilter
-import com.trader.defichain.db.search.getMetrics
-import com.trader.defichain.db.search.getPoolSwaps
+import com.trader.defichain.db.search.*
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
 import io.ktor.http.*
@@ -16,6 +14,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -89,8 +88,10 @@ fun Application.configureRouting() {
         }
         get("/graph") {
             val poolSwap = extractPoolSwap(call) ?: return@get call.respond(BadRequest("?poolSwap=... is missing"))
-            val time = call.request.queryParameters["time"] ?: return@get call.respond(BadRequest("?time=... is missing"))
-            val path = call.request.queryParameters["path"] ?: return@get call.respond(BadRequest("?path=... is missing"))
+            val time =
+                call.request.queryParameters["time"] ?: return@get call.respond(BadRequest("?time=... is missing"))
+            val path =
+                call.request.queryParameters["path"] ?: return@get call.respond(BadRequest("?path=... is missing"))
             val graph = getMetrics(poolSwap, time.toLong(), path.toInt())
             call.respond(graph)
         }
@@ -110,19 +111,17 @@ fun Application.configureRouting() {
             check(description.length < 150)
 
             val filter = call.receive<PoolHistoryFilter>()
-            val poolSwaps = getPoolSwaps(filter)
+            val poolSwaps = getPoolSwaps(filter, DataType.LIST, 1)
             if (poolSwaps.rows.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, "does not match any records")
                 return@post
             }
-            for(connection in connections) {
-                if (connection.uuid == uuid) {
-                    connection.description = description
-                    connection.filter = filter
-                    call.respond(HttpStatusCode.OK, "ok")
-                    return@post
-                }
+
+            if (setFilter(uuid, description, filter)) {
+                call.respond(HttpStatusCode.OK, "ok")
+                return@post
             }
+
             call.respond(HttpStatusCode.BadRequest, "invalid UUID")
         }
         get("/stats") {
@@ -132,9 +131,32 @@ fun Application.configureRouting() {
             val tokensTo = getTokenIdentifiers(call.request.queryParameters["tokenTo"])
             call.respond(DB.stats(template, period, tokensFrom, tokensTo))
         }
+        get("/download") {
+            val uuid = call.request.queryParameters["uuid"]
+            val connection = connections.find { it.uuid == uuid }
+            if (connection != null) {
+                val filter = connection.filter
+                if (filter != null) {
+                    val csv = getPoolSwapsAsCSV(filter)
+                    call.respondText(csv, ContentType.Text.CSV)
+                    return@get
+                }
+            }
+            call.respondText(
+                "<h1>This download link is no longer valid</h1>",
+                ContentType.Text.Html,
+                HttpStatusCode.BadRequest
+            )
+        }
+        post("update") {
+            val uuid = call.request.queryParameters["uuid"]!!
+            val filter = call.receive<PoolHistoryFilter>()
+            setFilter(uuid, "#search-filter", filter)
+            call.respond(HttpStatusCode.OK)
+        }
         post("/poolswaps") {
             val filter = call.receive<PoolHistoryFilter>()
-            val poolSwaps = getPoolSwaps(filter)
+            val poolSwaps = getPoolSwaps(filter, DataType.LIST, 26)
             call.respond(poolSwaps)
         }
         get("/clear") {
@@ -148,6 +170,21 @@ fun Application.configureRouting() {
             call.respond(testResult)
         }
     }
+}
+
+private fun setFilter(
+    uuid: String,
+    description: String,
+    filter: PoolHistoryFilter
+): Boolean {
+    for (connection in connections) {
+        if (connection.uuid == uuid) {
+            connection.description = description
+            connection.filter = filter
+            return true
+        }
+    }
+    return false
 }
 
 private suspend fun extractPoolSwap(call: ApplicationCall): PoolSwap? {
