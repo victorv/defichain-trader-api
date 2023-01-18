@@ -95,9 +95,6 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                         .breakdown
                         .first { it.path == path }
                         .estimate
-               //     println("${r.first().estimate} ${newPoolPair.reserveA / newPoolPair.reserveB}")
-
-//                    println(r)
 
                     val current = byTime[roundedTime]
                     if (current == null) {
