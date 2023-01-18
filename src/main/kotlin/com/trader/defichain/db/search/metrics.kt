@@ -95,7 +95,7 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                         .breakdown
                         .first { it.path == path }
                         .estimate
-                    //     println("${r.first().estimate} ${newPoolPair.reserveA / newPoolPair.reserveB}")
+               //     println("${r.first().estimate} ${newPoolPair.reserveA / newPoolPair.reserveB}")
 
 //                    println(r)
 
@@ -132,14 +132,9 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
 
     val candles = ArrayList<List<Double>>(byTime.size)
     var prevCandle: CandleStick? = null
-    var prevTime = 0L
     for (candle in byTime.values.sortedBy { it.time }) {
         val open = prevCandle?.close ?: candle.open
-
-        val duplicateTimeCorrection = if (prevTime == candle.time) 1 else 0
-        prevTime = candle.time + duplicateTimeCorrection
-
-        candles.add(listOf(open, candle.close, candle.low, candle.high, (candle.time / 1000 + duplicateTimeCorrection).toDouble()))
+        candles.add(listOf(open, candle.close, candle.low, candle.high, (candle.time / 1000).toDouble()))
         prevCandle = candle
     }
     return candles
