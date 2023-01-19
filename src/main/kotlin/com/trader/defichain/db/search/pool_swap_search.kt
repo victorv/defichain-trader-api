@@ -34,12 +34,15 @@ swaps as (
  top.price as price_to
  from pool_swap
  inner join minted_tx m on m.tx_row_id = pool_swap.tx_row_id
+ inner join block on block.height = m.block_height
  inner join tx on pool_swap.tx_row_id = tx.row_id
  inner join latest_oracle_price fop on fop.token = token_from or (fop.token = 1 AND token_from = 124)
  inner join latest_oracle_price top on top.token = token_to or (top.token = 1 AND token_to = 124)
  where 
   (:pager_block_height IS NULL or block_height <= :pager_block_height) AND
   pool_swap.tx_row_id <> ANY(:blacklisted) AND
+  (:min_date IS NULL or block.time >= :min_date) AND
+  (:max_date IS NULL or block.time <= :max_date) AND
   (:min_block_height IS NULL or block_height >= :min_block_height) AND
   (:max_block_height IS NULL or block_height <= :max_block_height) AND
   (:min_fee IS NULL or fee >= :min_fee) AND
@@ -88,7 +91,7 @@ left join mempool on mempool.tx_row_id = pool_swap.tx_row_id;
 """.trimIndent()
 
 fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
-    val  dateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")
+    val dateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")
 
     val swaps = getPoolSwaps(filter, DataType.CSV, 5000).rows
     val csv = java.lang.StringBuilder()
@@ -123,7 +126,7 @@ fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
     csv.append(',')
     csv.append('\n')
 
-    for(swap in swaps) {
+    for (swap in swaps) {
         csv.append(swap.block?.blockHeight ?: -1)
         csv.append(',')
 
@@ -159,6 +162,13 @@ fun getPoolSwapsAsCSV(filter: PoolHistoryFilter): String {
     return csv.toString()
 }
 
+fun toShortMillis(epoch: Long?): Long? {
+    if (epoch != null) {
+        return epoch / 1000
+    }
+    return null
+}
+
 fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): SearchResult {
     connectionPool.connection.use { connection ->
         var pagerBlockHeight: Int? = null
@@ -184,6 +194,8 @@ fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): Sea
             "from_address_whitelist_is_null" to SQLValue(fromAddressWhitelist == null, Types.BOOLEAN),
             "to_address_whitelist" to SQLValue(toAddressWhitelist, Types.ARRAY, "BIGINT"),
             "to_address_whitelist_is_null" to SQLValue(toAddressWhitelist == null, Types.BOOLEAN),
+            "min_date" to SQLValue(toShortMillis(filter.minDate), Types.BIGINT),
+            "max_date" to SQLValue(toShortMillis(filter.maxDate), Types.BIGINT),
             "min_block_height" to SQLValue(filter.minBlock, Types.INTEGER),
             "max_block_height" to SQLValue(filter.maxBlock, Types.INTEGER),
             "min_fee" to SQLValue(filter.minFee, Types.NUMERIC),
@@ -368,6 +380,8 @@ data class Pager(
 @kotlinx.serialization.Serializable
 data class PoolHistoryFilter(
     val txID: String? = null,
+    val minDate: Long? = null,
+    val maxDate: Long? = null,
     val minBlock: Int? = null,
     val maxBlock: Int? = null,
     val minInputAmount: Double? = null,
