@@ -40,7 +40,7 @@ swaps as (
  inner join latest_oracle_price top on top.token = token_to or (top.token = 1 AND token_to = 124)
  where 
   (:pager_block_height IS NULL or block_height <= :pager_block_height) AND
-  pool_swap.tx_row_id <> ANY(:blacklisted) AND
+  (pool_swap.tx_row_id not in :blacklisted) AND
   (:min_date IS NULL or block.time >= :min_date) AND
   (:max_date IS NULL or block.time <= :max_date) AND
   (:min_block_height IS NULL or block_height >= :min_block_height) AND
@@ -177,7 +177,6 @@ fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): Sea
             pagerBlockHeight = filter.pager.maxBlockHeight
             blacklist = filter.pager.blacklist.toTypedArray()
         }
-        val blacklistArray = connection.createArrayOf("BIGINT", blacklist)
 
         val tokensFrom = getTokenIdentifiers(filter.fromTokenSymbol)
         val tokensTo = getTokenIdentifiers(filter.toTokenSymbol)
@@ -206,11 +205,13 @@ fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): Sea
             "max_output_amount" to SQLValue(filter.maxOutputAmount, Types.NUMERIC),
             "tx_id" to SQLValue(txRowID, Types.BIGINT),
             "pager_block_height" to SQLValue(pagerBlockHeight, Types.INTEGER),
-            "blacklisted" to SQLValue(blacklistArray, Types.ARRAY),
         )
 
         val poolSwaps = ArrayList<PoolSwapRow>()
         var sql = template_selectPoolSwaps.replace("limit 26", "limit $limit")
+        val blacklistString = blacklist.joinToString(",")
+        sql = sql.replace(":blacklisted", "($blacklistString)")
+
         if (tokensFrom.size == 1 && filter.toTokenSymbol == "is_sold_or_bought") {
             val check = "token_from = ${tokensFrom[0]} or token_to = ${tokensFrom[0]}"
             sql = sql.replace(":token_from", check)
