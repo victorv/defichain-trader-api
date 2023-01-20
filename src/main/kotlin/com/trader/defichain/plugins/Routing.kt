@@ -124,12 +124,10 @@ fun Application.configureRouting() {
 
             call.respond(HttpStatusCode.BadRequest, "invalid UUID")
         }
-        get("/stats") {
-            val template = call.request.queryParameters["template"]!!
-            val period = call.request.queryParameters["period"]!!.toInt()
-            val tokensFrom = getTokenIdentifiers(call.request.queryParameters["tokenFrom"])
-            val tokensTo = getTokenIdentifiers(call.request.queryParameters["tokenTo"])
-            call.respond(DB.stats(template, period, tokensFrom, tokensTo))
+        post("/stats") {
+            val filter = call.receive<PoolHistoryFilter>()
+            val stats = getStats(filter)
+            call.respond(stats)
         }
         get("/download") {
             val uuid = call.request.queryParameters["uuid"]

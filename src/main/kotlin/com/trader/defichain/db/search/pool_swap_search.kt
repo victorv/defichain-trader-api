@@ -2,19 +2,75 @@ package com.trader.defichain.db.search
 
 import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
-import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.SwapResult
-import com.trader.defichain.dex.getTokenIdentifiers
-import com.trader.defichain.dex.testPoolSwap
+import com.trader.defichain.dex.*
 import com.trader.defichain.util.SQLValue
 import com.trader.defichain.util.floorPlain
+import com.trader.defichain.util.get
 import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
+import java.sql.Connection
 import java.sql.ResultSet
 import java.sql.Types
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+
+@Language("sql")
+private val template_selectStats = """
+with latest_oracle as (
+select token, max(block_height) as block_height from oracle_price group by token
+),
+latest_oracle_price as (
+select oracle_price.token, oracle_price.price from oracle_price 
+inner join latest_oracle lo on lo.token=oracle_price.token AND lo.block_height=oracle_price.block_height
+),    
+swaps as (
+ select 
+ pool_swap.tx_row_id,
+ at.dc_address = '8defichainBurnAddressXXXXXXXdRQkSm' as is_burn,
+ amount_from * fop.price as amount_from_usd,
+ amount_to * top.price as amount_to_usd
+ from pool_swap
+ inner join minted_tx m on m.tx_row_id = pool_swap.tx_row_id
+ inner join block on block.height = m.block_height
+ inner join tx on pool_swap.tx_row_id = tx.row_id
+ inner join latest_oracle_price fop on fop.token = token_from or (fop.token = 1 AND token_from = 124)
+ inner join latest_oracle_price top on top.token = token_to or (top.token = 1 AND token_to = 124)
+ inner join address at on at.row_id = "to"
+ where 
+  (:pager_block_height IS NULL or block_height <= :pager_block_height) AND
+  (pool_swap.tx_row_id not in :blacklisted) AND
+  (:min_date IS NULL or block.time >= :min_date) AND
+  (:max_date IS NULL or block.time <= :max_date) AND
+  (:min_block_height IS NULL or block_height >= :min_block_height) AND
+  (:max_block_height IS NULL or block_height <= :max_block_height) AND
+  (:min_fee IS NULL or fee >= :min_fee) AND
+  (:max_fee IS NULL or fee <= :max_fee) AND
+  (:min_input_amount IS NULL or amount_from * fop.price >= :min_input_amount) AND
+  (:max_input_amount IS NULL or amount_from * fop.price <= :max_input_amount) AND
+  (:min_output_amount IS NULL or amount_to * top.price >= :min_output_amount) AND
+  (:max_output_amount IS NULL or amount_to * top.price <= :max_output_amount) AND
+  (:token_from) AND
+  (:token_to) AND
+  (:from_address IS NULL or "from" = :from_address) AND
+  (:from_address_whitelist_is_null = true or "from" = ANY(:from_address_whitelist)) AND
+  (:to_address IS NULL or "to" = :to_address) AND
+  (:to_address_whitelist_is_null = true or "to" = ANY(:to_address_whitelist)) AND
+  (:tx_id IS NULL or pool_swap.tx_row_id = :tx_id)
+ order by m.block_height DESC, m.txn limit 26 offset 0)
+select
+count(*) as tx_count,
+sum(amount_from) as amount_from, 
+sum(amount_from_usd) as amount_from_usd, 
+sum(amount_to) as amount_to, 
+sum(amount_to_usd) as amount_to_usd, 
+token_from, 
+token_to,
+is_burn
+from pool_swap
+inner join swaps on swaps.tx_row_id = pool_swap.tx_row_id
+group by token_from, token_to, is_burn;
+""".trimIndent()
 
 @Language("sql")
 private val template_selectPoolSwaps = """
@@ -169,57 +225,104 @@ fun toShortMillis(epoch: Long?): Long? {
     return null
 }
 
-fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): SearchResult {
+fun getStats(filter: PoolHistoryFilter): List<TokenStats> {
     connectionPool.connection.use { connection ->
-        var pagerBlockHeight: Int? = null
-        var blacklist = arrayOf<Long>(-1)
-        if (filter.pager != null) {
-            pagerBlockHeight = filter.pager.maxBlockHeight
-            blacklist = filter.pager.blacklist.toTypedArray()
+        val (parameters, sql) = createQuery(filter, connection, template_selectStats, 25000)
+
+        connection.prepareStatement(sql, parameters).use { statement ->
+            statement.executeQuery().use { resultSet ->
+
+                val stats = mutableMapOf<String, TokenStats>()
+                while (resultSet.next()) {
+                    val amountFrom = resultSet.get<Double>("amount_from")
+                    val amountSoldUSD = resultSet.get<Double>("amount_from_usd")
+
+                    val amountTo = resultSet.get<Double>("amount_to")
+                    val amountBoughtUSD = resultSet.get<Double>("amount_to_usd")
+
+                    val tokenFrom = resultSet.get<Int>("token_from")
+                    val tokenTo = resultSet.get<Int>("token_to")
+                    val txCount = resultSet.get<Int>("tx_count")
+                    val isBurn = resultSet.get<Boolean>("is_burn")
+                    val fromSymbol = getTokenSymbol(tokenFrom)
+                    var toSymbol = getTokenSymbol(tokenTo)
+                    if (isBurn) {
+                        toSymbol = "burned $toSymbol"
+                    }
+
+                    // TODO swaps like DFI to DFI will count twice?
+                    val fromStats = stats.getOrDefault(fromSymbol, TokenStats(fromSymbol))
+                    fromStats.soldTXCount += txCount
+                    fromStats.amountSold += amountFrom
+                    fromStats.amountSoldUSD += amountSoldUSD
+                    fromStats.sold.add(
+                        SwapStats(
+                            txCount = txCount,
+                            token = toSymbol,
+                            inputAmount = amountFrom,
+                            inputAmountUSD = amountSoldUSD,
+                            outputAmount = amountTo,
+                            outputAmountUSD = amountBoughtUSD
+                        )
+                    )
+                    stats[fromSymbol] = fromStats
+
+                    val toStats = stats.getOrDefault(toSymbol, TokenStats(toSymbol))
+                    toStats.boughtTXCount += txCount
+                    toStats.amountBought += amountTo
+                    toStats.amountBoughtUSD += amountBoughtUSD
+                    toStats.bought.add(
+                        SwapStats(
+                            txCount = txCount,
+                            token = fromSymbol,
+                            inputAmount = amountFrom,
+                            inputAmountUSD = amountSoldUSD,
+                            outputAmount = amountTo,
+                            outputAmountUSD = amountBoughtUSD
+                        )
+                    )
+                    stats[toSymbol] = toStats
+                }
+
+                stats.values.forEach {
+                    it.amountNetUSD = it.amountBoughtUSD - it.amountSoldUSD
+                    it.amountNet = it.amountBought - it.amountSold
+                    it.volumeUSD = it.amountSoldUSD + it.amountBoughtUSD
+                    it.volume = it.amountSold + it.amountBought
+                    it.sold.sort()
+                    it.bought.sort()
+
+                    val tokenStats = mutableMapOf<String, TokenStats>()
+                    for(sold in it.sold) {
+                        val swapStats = tokenStats.getOrDefault(sold.token, TokenStats(sold.token))
+                        swapStats.amountBought += sold.outputAmount
+                        swapStats.amountBoughtUSD += sold.outputAmountUSD
+                        tokenStats[sold.token] = swapStats
+                    }
+                    for(bought in it.bought) {
+                        val swapStats = tokenStats.getOrDefault(bought.token, TokenStats(bought.token))
+                        swapStats.amountSold += bought.inputAmount
+                        swapStats.amountSoldUSD += bought.inputAmountUSD
+                        tokenStats[bought.token] = swapStats
+                    }
+                    tokenStats.values.forEach { tokenStat ->
+                        tokenStat.amountNetUSD = tokenStat.amountBoughtUSD - tokenStat.amountSoldUSD
+                        tokenStat.amountNet = tokenStat.amountBought - tokenStat.amountSold
+                        tokenStat.volumeUSD = tokenStat.amountSoldUSD + tokenStat.amountBoughtUSD
+                        tokenStat.volume = tokenStat.amountSold + tokenStat.amountBought
+                    }
+                    it.net.addAll(tokenStats.values.sorted())
+                }
+                return stats.values.sorted()
+            }
         }
+    }
+}
 
-        val tokensFrom = getTokenIdentifiers(filter.fromTokenSymbol)
-        val tokensTo = getTokenIdentifiers(filter.toTokenSymbol)
-        val fromAddress = DB.selectAddressRowID(connection, filter.fromAddress)
-        val toAddress = DB.selectAddressRowID(connection, filter.toAddress)
-        val fromAddressWhitelist = DB.selectAddresses(connection, filter.fromAddressGroup)
-        val toAddressWhitelist = DB.selectAddresses(connection, filter.toAddressGroup)
-        val txRowID = DB.selectTransactionRowID(connection, filter.txID)
-
-        val parameters = mapOf(
-            "from_address" to SQLValue(fromAddress, Types.BIGINT),
-            "to_address" to SQLValue(toAddress, Types.BIGINT),
-            "from_address_whitelist" to SQLValue(fromAddressWhitelist, Types.ARRAY, "BIGINT"),
-            "from_address_whitelist_is_null" to SQLValue(fromAddressWhitelist == null, Types.BOOLEAN),
-            "to_address_whitelist" to SQLValue(toAddressWhitelist, Types.ARRAY, "BIGINT"),
-            "to_address_whitelist_is_null" to SQLValue(toAddressWhitelist == null, Types.BOOLEAN),
-            "min_date" to SQLValue(toShortMillis(filter.minDate), Types.BIGINT),
-            "max_date" to SQLValue(toShortMillis(filter.maxDate), Types.BIGINT),
-            "min_block_height" to SQLValue(filter.minBlock, Types.INTEGER),
-            "max_block_height" to SQLValue(filter.maxBlock, Types.INTEGER),
-            "min_fee" to SQLValue(filter.minFee, Types.NUMERIC),
-            "max_fee" to SQLValue(filter.maxFee, Types.NUMERIC),
-            "min_input_amount" to SQLValue(filter.minInputAmount, Types.NUMERIC),
-            "max_input_amount" to SQLValue(filter.maxInputAmount, Types.NUMERIC),
-            "min_output_amount" to SQLValue(filter.minOutputAmount, Types.NUMERIC),
-            "max_output_amount" to SQLValue(filter.maxOutputAmount, Types.NUMERIC),
-            "tx_id" to SQLValue(txRowID, Types.BIGINT),
-            "pager_block_height" to SQLValue(pagerBlockHeight, Types.INTEGER),
-        )
-
-        val poolSwaps = ArrayList<PoolSwapRow>()
-        var sql = template_selectPoolSwaps.replace("limit 26", "limit $limit")
-        val blacklistString = blacklist.joinToString(",")
-        sql = sql.replace(":blacklisted", "($blacklistString)")
-
-        if (tokensFrom.size == 1 && filter.toTokenSymbol == "is_sold_or_bought") {
-            val check = "token_from = ${tokensFrom[0]} or token_to = ${tokensFrom[0]}"
-            sql = sql.replace(":token_from", check)
-            sql = sql.replace(":token_to", "NULL is NULL")
-        } else {
-            sql = sql.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
-            sql = sql.replace(":token_to", DB.toIsAny("token_to", tokensTo))
-        }
+fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): SearchResult {
+    val poolSwaps = ArrayList<PoolSwapRow>()
+    connectionPool.connection.use { connection ->
+        val (parameters, sql) = createQuery(filter, connection, template_selectPoolSwaps, limit)
 
         connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
@@ -239,6 +342,63 @@ fun getPoolSwaps(filter: PoolHistoryFilter, dataType: DataType, limit: Int): Sea
             txCount = 0
         )
     }
+}
+
+private fun createQuery(
+    filter: PoolHistoryFilter,
+    connection: Connection,
+    template: String,
+    limit: Int
+): Pair<Map<String, SQLValue>, String> {
+    var pagerBlockHeight: Int? = null
+    var blacklist = arrayOf<Long>(-1)
+    if (filter.pager != null) {
+        pagerBlockHeight = filter.pager.maxBlockHeight
+        blacklist = filter.pager.blacklist.toTypedArray()
+    }
+
+    val tokensFrom = getTokenIdentifiers(filter.fromTokenSymbol)
+    val tokensTo = getTokenIdentifiers(filter.toTokenSymbol)
+    val fromAddress = DB.selectAddressRowID(connection, filter.fromAddress)
+    val toAddress = DB.selectAddressRowID(connection, filter.toAddress)
+    val fromAddressWhitelist = DB.selectAddresses(connection, filter.fromAddressGroup)
+    val toAddressWhitelist = DB.selectAddresses(connection, filter.toAddressGroup)
+    val txRowID = DB.selectTransactionRowID(connection, filter.txID)
+
+    val parameters = mapOf(
+        "from_address" to SQLValue(fromAddress, Types.BIGINT),
+        "to_address" to SQLValue(toAddress, Types.BIGINT),
+        "from_address_whitelist" to SQLValue(fromAddressWhitelist, Types.ARRAY, "BIGINT"),
+        "from_address_whitelist_is_null" to SQLValue(fromAddressWhitelist == null, Types.BOOLEAN),
+        "to_address_whitelist" to SQLValue(toAddressWhitelist, Types.ARRAY, "BIGINT"),
+        "to_address_whitelist_is_null" to SQLValue(toAddressWhitelist == null, Types.BOOLEAN),
+        "min_date" to SQLValue(toShortMillis(filter.minDate), Types.BIGINT),
+        "max_date" to SQLValue(toShortMillis(filter.maxDate), Types.BIGINT),
+        "min_block_height" to SQLValue(filter.minBlock, Types.INTEGER),
+        "max_block_height" to SQLValue(filter.maxBlock, Types.INTEGER),
+        "min_fee" to SQLValue(filter.minFee, Types.NUMERIC),
+        "max_fee" to SQLValue(filter.maxFee, Types.NUMERIC),
+        "min_input_amount" to SQLValue(filter.minInputAmount, Types.NUMERIC),
+        "max_input_amount" to SQLValue(filter.maxInputAmount, Types.NUMERIC),
+        "min_output_amount" to SQLValue(filter.minOutputAmount, Types.NUMERIC),
+        "max_output_amount" to SQLValue(filter.maxOutputAmount, Types.NUMERIC),
+        "tx_id" to SQLValue(txRowID, Types.BIGINT),
+        "pager_block_height" to SQLValue(pagerBlockHeight, Types.INTEGER),
+    )
+
+    var sql = template.replace("limit 26", "limit $limit")
+    val blacklistString = blacklist.joinToString(",")
+    sql = sql.replace(":blacklisted", "($blacklistString)")
+
+    if (tokensFrom.size == 1 && filter.toTokenSymbol == "is_sold_or_bought") {
+        val check = "token_from = ${tokensFrom[0]} or token_to = ${tokensFrom[0]}"
+        sql = sql.replace(":token_from", check)
+        sql = sql.replace(":token_to", "NULL is NULL")
+    } else {
+        sql = sql.replace(":token_from", DB.toIsAny("token_from", tokensFrom))
+        sql = sql.replace(":token_to", DB.toIsAny("token_to", tokensTo))
+    }
+    return Pair(parameters, sql)
 }
 
 private fun getPoolSwapRow(resultSet: ResultSet, dataType: DataType): PoolSwapRow {
@@ -377,6 +537,42 @@ data class Pager(
     val maxBlockHeight: Int,
     val blacklist: List<Long>,
 )
+
+@kotlinx.serialization.Serializable
+data class SwapStats(
+    val token: String,
+    var txCount: Int,
+    val inputAmount: Double,
+    val inputAmountUSD: Double,
+    val outputAmount: Double,
+    val outputAmountUSD: Double,
+) : Comparable<SwapStats> {
+    override fun compareTo(other: SwapStats): Int {
+        return if (inputAmountUSD < other.inputAmountUSD) 1 else -1
+    }
+}
+
+@kotlinx.serialization.Serializable
+data class TokenStats(
+    val token: String,
+    var amountNetUSD: Double = 0.0,
+    var amountNet: Double = 0.0,
+    var volumeUSD: Double = 0.0,
+    var volume: Double = 0.0,
+    var soldTXCount: Int = 0,
+    var boughtTXCount: Int = 0,
+    var amountSold: Double = 0.0,
+    var amountSoldUSD: Double = 0.0,
+    val sold: MutableList<SwapStats> = mutableListOf(),
+    var amountBought: Double = 0.0,
+    var amountBoughtUSD: Double = 0.0,
+    val bought: MutableList<SwapStats> = mutableListOf(),
+    val net: MutableList<TokenStats> = mutableListOf(),
+) : Comparable<TokenStats> {
+    override fun compareTo(other: TokenStats): Int {
+        return if (volumeUSD < other.volumeUSD) 1 else -1
+    }
+}
 
 @kotlinx.serialization.Serializable
 data class PoolHistoryFilter(
