@@ -5,6 +5,32 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.math.BigDecimal
 
 @kotlinx.serialization.Serializable
+data class RPCAuctionBid(
+    val owner: String,
+    val amount: String,
+)
+
+@kotlinx.serialization.Serializable
+data class RPCAuctionBatch(
+    val index: Int,
+    val collaterals: List<String>,
+    val loan: String,
+    val highestBid: RPCAuctionBid?
+)
+
+@kotlinx.serialization.Serializable
+data class RPCAuction(
+    val vaultId: String,
+    val loanSchemeId: String,
+    val ownerAddress: String,
+    val state: String,
+    val liquidationHeight: Int,
+    val batchCount: Int,
+    val liquidationPenalty: Double,
+    val batches: List<RPCAuctionBatch>,
+)
+
+@kotlinx.serialization.Serializable
 data class Token(
     val symbol: String,
     val symbolKey: String,
@@ -69,5 +95,5 @@ enum class RPCMethod(val id: String) {
     DECODE_CUSTOM_TX("decodecustomtx"),
     GET_RAW_TRANSACTION("getrawtransaction"),
     GET_BLOCK_HASH("getblockhash"),
-    GET_VAULT("getvault");
+    LIST_AUCTIONS("listauctions");
 }

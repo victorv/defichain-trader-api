@@ -1,5 +1,6 @@
 package com.trader.defichain.dex
 
+import com.trader.defichain.auction.listAuctions
 import com.trader.defichain.http.gzip
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPC.Companion.listPrices
@@ -243,6 +244,7 @@ suspend fun cachePoolPairs(): Pair<Map<Int, PoolPair>, Map<Int, Double>> {
     poolPairsCached = gzip(pools)
 
     val oraclePrices = assignOraclePrices()
+
     return Pair(pools, oraclePrices)
 }
 

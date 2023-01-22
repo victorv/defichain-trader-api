@@ -1,7 +1,6 @@
 package com.trader.defichain.rpc
 
 import com.trader.defichain.config.rpcConfig
-import com.trader.defichain.db.insertTX
 import com.trader.defichain.dex.PoolPair
 import com.trader.defichain.indexer.calculateFee
 import com.trader.defichain.plugins.getHttpClientEngine
@@ -132,6 +131,11 @@ class RPC {
 
         suspend fun listPrices(): List<OraclePrice> = getValue(
             RPCMethod.LIST_PRICES,
+            limit1000,
+        )
+
+        suspend fun listAuctions(): List<RPCAuction> = getValue(
+            RPCMethod.LIST_AUCTIONS,
             limit1000,
         )
     }

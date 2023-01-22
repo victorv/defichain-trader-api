@@ -1,7 +1,7 @@
 package com.trader.defichain.plugins
 
 import com.trader.defichain.appServerConfig
-import com.trader.defichain.db.DB
+import com.trader.defichain.auction.listAuctions
 import com.trader.defichain.db.search.*
 import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
@@ -14,7 +14,6 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -104,6 +103,10 @@ fun Application.configureRouting() {
             val response = getCachedTokens()
             call.response.header(HttpHeaders.ContentEncoding, "gzip")
             call.respondBytes(ContentType.Application.Json) { response }
+        }
+        get("/auctions") {
+            val auctions = listAuctions()
+            call.respond(auctions)
         }
         post("/notification") {
             val uuid = call.request.queryParameters["uuid"]!!

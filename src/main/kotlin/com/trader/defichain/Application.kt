@@ -1,5 +1,6 @@
 package com.trader.defichain
 
+import com.trader.defichain.auction.broadcastAuctions
 import com.trader.defichain.config.RPCConfig
 import com.trader.defichain.config.ZMQConfig
 import com.trader.defichain.config.rpcConfig
@@ -64,6 +65,10 @@ fun main(vararg args: String) {
 
     GlobalScope.launch(Dispatchers.IO) {
         broadcastDEX(coroutineContext)
+    }
+
+    GlobalScope.launch(Dispatchers.IO) {
+        broadcastAuctions(coroutineContext)
     }
 
     GlobalScope.launch(Dispatchers.IO) {
