@@ -62,7 +62,7 @@ suspend fun listAuctions(): ArrayList<Auction> {
                 else if (tokenAmount.token == loan.token) null
                 else testPoolSwap(
                     PoolSwap(
-                        amountFrom = loan.value,
+                        amountFrom = minimumBid,
                         tokenFrom = loan.token,
                         tokenTo = tokenAmount.token,
                         desiredResult = tokenAmount.value,
