@@ -21,7 +21,7 @@ out_a,
 in_b,
 out_b,
 commission,
-block.time as "block_time"
+block.time as block_time
 from pool_pair
 inner join fee on fee.token = pool_pair.token
  AND fee.block_height = 
@@ -32,13 +32,33 @@ where pool_pair.token = ANY(:pool_ids)
 order by pool_pair.block_height DESC     
 """.trimIndent()
 
+@Language("sql")
+private val template_swaps = """
+select
+amount_to / amount_from as estimate,
+time as block_time
+from pool_swap
+inner join minted_tx mt on pool_swap.tx_row_id = mt.tx_row_id
+inner join block b on mt.block_height = b.height
+where 
+path = :path AND
+block_height >= :min_block_height AND
+token_from = :token_from AND
+token_to = :token_to AND
+amount_from <> 0 AND
+amount_to <> 0
+""".trimIndent()
+
 fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<List<Double>> {
+    val tokenFromId = getTokenId(poolSwap.tokenFrom) ?: emptyList<List<Double>>()
+    val tokenToId = getTokenId(poolSwap.tokenTo) ?: emptyList<List<Double>>()
 
     val swapPath = getSwapPaths(poolSwap).first { it.hashCode() == path }
     val swapPaths = listOf(swapPath)
     val poolIdentifiers = swapPath.toTypedArray()
 
     val byTime = HashMap<Long, CandleStick>()
+    var minBlockHeight = Integer.MAX_VALUE
 
     connectionPool.connection.use { connection ->
         val poolIDArray = connection.createArrayOf("INT", poolIdentifiers)
@@ -57,6 +77,8 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
             statement.executeQuery().use { resultSet ->
                 while (resultSet.next() && byTime.size < 100) {
                     val poolID = resultSet.getInt("pool_id")
+                    val blockHeight = resultSet.getInt("block_height")
+                    minBlockHeight = min(blockHeight, minBlockHeight)
 
                     val livePoolPair = getPool(poolID)
                     val newPoolPair = PoolPair(
@@ -80,7 +102,6 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                     }
 
                     val time = resultSet.getLong("block_time") * 1000
-                    val roundedTime = time - (time % candleTime)
                     poolPairs[poolID] = newPoolPair
 
                     val r = executeSwaps(
@@ -96,33 +117,26 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                         .first { it.path == path }
                         .estimate
 
-                    val current = byTime[roundedTime]
-                    if (current == null) {
-                        byTime[roundedTime] = CandleStick(
-                            open = estimate,
-                            low = estimate,
-                            close = estimate,
-                            high = estimate,
-                            minTime = time,
-                            maxTime = time,
-                            time = roundedTime
-                        )
-                    } else {
-                        val o = if (time < current.minTime) estimate else current.open
-                        val c = if (time > current.maxTime) estimate else current.close
-                        val l = min(current.low, estimate)
-                        val h = max(current.high, estimate)
-                        byTime[roundedTime] = CandleStick(
-                            open = o,
-                            close = c,
-                            high = h,
-                            low = l,
-                            minTime = min(time, current.minTime),
-                            maxTime = max(time, current.maxTime),
-                            time = roundedTime
-                        )
-                    }
+                    addCandle(candleTime, byTime, estimate, time)
                 }
+            }
+        }
+
+        val swapParams = mapOf(
+            "min_block_height" to minBlockHeight,
+            "path" to path,
+            "token_from" to tokenFromId,
+            "token_to" to tokenToId,
+        )
+
+        connection.prepareStatement(template_swaps, swapParams).use { statement ->
+
+            statement.executeQuery().use { resultSet ->
+               while (resultSet.next()) {
+                   val time = resultSet.getLong("block_time") * 1000
+                   val estimate = resultSet.getDouble("estimate")
+                   addCandle(candleTime, byTime, estimate, time)
+               }
             }
         }
     }
@@ -135,6 +149,41 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
         prevCandle = candle
     }
     return candles
+}
+
+private fun addCandle(
+    candleTime: Long,
+    byTime: HashMap<Long, CandleStick>,
+    estimate: Double,
+    time: Long
+) {
+    val roundedTime = time - (time % candleTime)
+    val current = byTime[roundedTime]
+    if (current == null) {
+        byTime[roundedTime] = CandleStick(
+            open = estimate,
+            low = estimate,
+            close = estimate,
+            high = estimate,
+            minTime = time,
+            maxTime = time,
+            time = roundedTime
+        )
+    } else {
+        val o = if (time < current.minTime) estimate else current.open
+        val c = if (time > current.maxTime) estimate else current.close
+        val l = min(current.low, estimate)
+        val h = max(current.high, estimate)
+        byTime[roundedTime] = CandleStick(
+            open = o,
+            close = c,
+            high = h,
+            low = l,
+            minTime = min(time, current.minTime),
+            maxTime = max(time, current.maxTime),
+            time = roundedTime
+        )
+    }
 }
 
 @kotlinx.serialization.Serializable

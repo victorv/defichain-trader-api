@@ -159,6 +159,7 @@ object CustomTX {
         val fromAmount: Double,
         val maxPrice: Double,
         var amountTo: TokenIndex.TokenAmount? = null,
+        var path: Int = 0
     )
 
     data class AddPoolLiquidity(

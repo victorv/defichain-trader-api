@@ -5,8 +5,8 @@ import com.trader.defichain.util.Future
 import kotlin.math.absoluteValue
 
 private val template_insertPoolSwap = """
-    INSERT INTO pool_swap (tx_row_id, "from", "to", token_from, token_to, token_to_alt, amount_from, amount_to, max_price) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO pool_swap (tx_row_id, "from", "to", token_from, token_to, token_to_alt, amount_from, amount_to, max_price, path) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(tx_row_id) DO UPDATE SET 
     "from" = ?,
     "to" = ?,
@@ -15,7 +15,8 @@ private val template_insertPoolSwap = """
     token_to_alt = ?,
     amount_from = ?,
     amount_to = ?,
-    max_price = ?
+    max_price = ?,
+    path = ?
     """.trimIndent()
 
 fun DBTX.insertPoolSwap(txRowID: Future<Long>, swap: CustomTX.PoolSwap) = doLater {
@@ -43,15 +44,17 @@ fun DBTX.insertPoolSwap(txRowID: Future<Long>, swap: CustomTX.PoolSwap) = doLate
         it.setDouble(7, swap.fromAmount.absoluteValue)
         it.setDouble(8, amountTo)
         it.setDouble(9, swap.maxPrice)
+        it.setInt(10, swap.path)
 
-        it.setLong(10, fromRowID)
-        it.setLong(11, toRowID)
-        it.setInt(12, swap.fromToken)
-        it.setInt(13, swap.toToken)
-        it.setInt(14, tokenToAlt)
-        it.setDouble(15, swap.fromAmount.absoluteValue)
-        it.setDouble(16, amountTo)
-        it.setDouble(17, swap.maxPrice)
+        it.setLong(11, fromRowID)
+        it.setLong(12, toRowID)
+        it.setInt(13, swap.fromToken)
+        it.setInt(14, swap.toToken)
+        it.setInt(15, tokenToAlt)
+        it.setDouble(16, swap.fromAmount.absoluteValue)
+        it.setDouble(17, amountTo)
+        it.setDouble(18, swap.maxPrice)
+        it.setInt(19, swap.path)
 
         check(it.executeUpdate() == 1)
     }

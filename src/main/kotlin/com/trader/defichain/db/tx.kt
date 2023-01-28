@@ -10,8 +10,8 @@ import java.math.BigDecimal
 private val fi = BigDecimal(100000000)
 
 private const val template_insertBlock = """
-INSERT INTO block (height, time, hash, finalized, master_node, minter) VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT (height) DO UPDATE SET time = ?, finalized = ?, master_node = ?, minter = ?
+INSERT INTO block (height, time, hash, finalized, dirty, master_node, minter) VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (height) DO UPDATE SET time = ?, finalized = ?, dirty = ?, master_node = ?, minter = ?
 """
 
 private const val template_insertMempoolTX = """
@@ -49,13 +49,15 @@ fun DBTX.insertBlock(block: Block, masterNode: Future<Long>, finalized: Boolean)
         it.setLong(2, block.medianTime)
         it.setString(3, block.hash)
         it.setBoolean(4, finalized)
-        it.setLong(5, masterNode.get())
-        it.setLong(6, minter)
+        it.setBoolean(5, !finalized)
+        it.setLong(6, masterNode.get())
+        it.setLong(7, minter)
 
-        it.setLong(7, block.medianTime)
-        it.setBoolean(8, finalized)
-        it.setLong(9, masterNode.get())
-        it.setLong(10, minter)
+        it.setLong(8, block.medianTime)
+        it.setBoolean(9, finalized)
+        it.setBoolean(10, !finalized)
+        it.setLong(11, masterNode.get())
+        it.setLong(12, minter)
         insertOrDoNothing(it)
     }
 }

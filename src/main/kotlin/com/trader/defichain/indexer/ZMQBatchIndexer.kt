@@ -1,17 +1,14 @@
 package com.trader.defichain.indexer
 
 import com.trader.defichain.db.*
-import com.trader.defichain.dex.getPool
-import com.trader.defichain.dex.getPoolID
-import com.trader.defichain.rpc.AccountHistory
-import com.trader.defichain.rpc.Block
-import com.trader.defichain.rpc.RPC
-import com.trader.defichain.rpc.RPCMethod
+import com.trader.defichain.dex.*
+import com.trader.defichain.rpc.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import kotlin.coroutines.CoroutineContext
 
@@ -106,7 +103,14 @@ private suspend fun indexZMQBatches(
 private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
     val masterNodeTX = RPC.getMasterNodeTX(zmqBatch.block.masterNode)
     val masterNode =
-        dbTX.insertTX(masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, masterNodeTX.size, isConfirmed = true, valid = true)
+        dbTX.insertTX(
+            masterNodeTX.tx.txID,
+            masterNodeTX.type,
+            masterNodeTX.fee,
+            masterNodeTX.size,
+            isConfirmed = true,
+            valid = true
+        )
     dbTX.insertBlock(zmqBatch.block, masterNode, true)
 
     for (zmqPair in zmqBatch.tx) {
@@ -116,6 +120,35 @@ private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
             throw RuntimeException("Failed to process $zmqPair", e)
         }
     }
+}
+
+private fun getSwapPath(swap: CustomTX.PoolSwap, customTX: CustomTX.Record): Int {
+    val compositeDex = customTX.results["compositeDex"]
+    val fromToken = getTokenSymbol(swap.fromToken)
+    val toToken = getTokenSymbol(swap.toToken)
+    if (compositeDex != null) {
+        return compositeDex.jsonPrimitive.content
+            .split("/")
+            .map {
+                val (tokenSymbolA, tokenSymbolB) = it.split("-")
+                val tokenIdA = getTokenId(tokenSymbolA)!!
+                val tokenIdB = getTokenId(tokenSymbolB)!!
+                getPoolID(tokenIdA, tokenIdB)
+            }.hashCode()
+    }
+
+    val paths = getSwapPaths(
+        PoolSwap(
+            tokenFrom = fromToken,
+            tokenTo = toToken,
+            amountFrom = 1.0,
+        )
+    )
+    if (paths.size == 1) {
+        return paths[0].hashCode()
+    }
+
+    return getPoolID(swap.fromToken, swap.toToken)
 }
 
 private suspend fun indexZMQPair(
@@ -153,12 +186,12 @@ private suspend fun indexZMQPair(
 
     if (customTX.isPoolSwap()) {
         val swap = customTX.asPoolSwap()
-
         if (zmqPair.isConfirmed) {
             val tokenAmount = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
             if (tokenAmount != null) {
                 swap.amountTo = tokenAmount
             }
+            swap.path = getSwapPath(swap, customTX)
         }
 
         dbTX.insertPoolSwap(txRowID, swap)
