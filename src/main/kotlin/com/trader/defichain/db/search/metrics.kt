@@ -45,9 +45,11 @@ path = :path AND
 block_height >= :min_block_height AND
 token_from = :token_from AND
 token_to = :token_to AND
-amount_from <> 0 AND
-amount_to <> 0
+amount_from > 0.000001 AND
+amount_to > 0.0001
 """.trimIndent()
+
+private const val LIMIT = 100
 
 fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<List<Double>> {
     val tokenFromId = getTokenId(poolSwap.tokenFrom) ?: emptyList<List<Double>>()
@@ -75,7 +77,7 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
         connection.prepareStatement(template_poolPairs, params).use { statement ->
 
             statement.executeQuery().use { resultSet ->
-                while (resultSet.next() && byTime.size < 100) {
+                while (resultSet.next() && byTime.size < LIMIT) {
                     val poolID = resultSet.getInt("pool_id")
                     val blockHeight = resultSet.getInt("block_height")
                     minBlockHeight = min(blockHeight, minBlockHeight)
@@ -147,6 +149,10 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
         val open = prevCandle?.close ?: candle.open
         candles.add(listOf(open, candle.close, candle.low, candle.high, (candle.time / 1000).toDouble()))
         prevCandle = candle
+    }
+
+    if (candles.size > LIMIT) {
+        return candles.subList(candles.size - LIMIT, candles.size)
     }
     return candles
 }
