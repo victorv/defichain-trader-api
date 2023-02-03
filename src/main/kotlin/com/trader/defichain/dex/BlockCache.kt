@@ -31,7 +31,9 @@ fun getTokenSymbol(tokenId: Int): String {
     return token.symbol
 }
 
-fun getTokenId(tokenSymbol: String): Int? = tokenIdsFromPoolsBySymbol[tokenSymbol]
+fun getTokenId(tokenSymbol: String): Int? =
+    tokenIdsFromPoolsBySymbol[tokenSymbol]
+        ?: tokensByID.entries.find { it.value.symbol == tokenSymbol }?.key
 
 private fun cryptoTokenIdentifiers(): Array<Int> {
     val identifiers = mutableSetOf<Int>()
@@ -100,7 +102,18 @@ fun getPoolID(tokenA: Int, tokenB: Int): Int {
         .key
 }
 
-fun executeSwaps(poolSwaps: List<AbstractPoolSwap>, poolPairs: Map<Int, PoolPair>, paths: List<List<Int>>, forceBestPath: Boolean): DexResult {
+fun getPoolID(symbol: String): Int {
+    val id = allPools.entries.find { it.value.symbol == symbol }?.key
+    check(id != null) { "Pool not found: $symbol" }
+    return id
+}
+
+fun executeSwaps(
+    poolSwaps: List<AbstractPoolSwap>,
+    poolPairs: Map<Int, PoolPair>,
+    paths: List<List<Int>>,
+    forceBestPath: Boolean
+): DexResult {
     var poolsForAllSwaps = mutableMapOf<Int, PoolPair>()
     val swapResults = ArrayList<SwapResult>()
 
@@ -343,6 +356,7 @@ private fun cachePoolTokensBySymbol(allTokens: Map<Int, Token>, pools: Collectio
 
 private suspend fun cacheAllTokensById() {
     tokensByID = RPC.listTokens()
+    println(tokensByID)
     tokensCached = gzip(tokensByID)
 }
 

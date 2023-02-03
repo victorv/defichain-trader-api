@@ -3,6 +3,7 @@ package com.trader.defichain.indexer
 import com.trader.defichain.db.*
 import com.trader.defichain.dex.*
 import com.trader.defichain.rpc.*
+import com.trader.defichain.util.joinVersions
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -129,11 +130,15 @@ private fun getSwapPath(swap: CustomTX.PoolSwap, customTX: CustomTX.Record): Int
     if (compositeDex != null) {
         return compositeDex.jsonPrimitive.content
             .split("/")
+            .joinVersions()
             .map {
                 val (tokenSymbolA, tokenSymbolB) = it.split("-")
-                val tokenIdA = getTokenId(tokenSymbolA)!!
-                val tokenIdB = getTokenId(tokenSymbolB)!!
-                getPoolID(tokenIdA, tokenIdB)
+                val tokenIdA = getTokenId(tokenSymbolA)
+                val tokenIdB = getTokenId(tokenSymbolB)
+                if (tokenIdA != null && tokenIdB != null) {
+                    return getPoolID(tokenIdA, tokenIdB)
+                }
+                getPoolID(it)
             }.hashCode()
     }
 
