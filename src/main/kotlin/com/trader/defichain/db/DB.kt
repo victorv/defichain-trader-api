@@ -317,6 +317,7 @@ object DB {
         return selectAllRecords(sql).map { it.jsonObject }
     }
 
+    @kotlinx.serialization.Serializable
     data class PoolSwap(
         val from: String,
         val to: String,
