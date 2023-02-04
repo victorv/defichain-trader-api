@@ -94,6 +94,7 @@ enum class RPCMethod(val id: String) {
     POOL_SWAP("poolswap"),
     COMPOSITE_SWAP("compositeswap"),
     LIST_UNSPENT("listunspent"),
+    GET_TOKEN_BALANCES("gettokenbalances"),
     GET_ACCOUNT_HISTORY("getaccounthistory"),
     DECODE_CUSTOM_TX("decodecustomtx"),
     GET_RAW_TRANSACTION("getrawtransaction"),

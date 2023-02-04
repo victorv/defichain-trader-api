@@ -44,7 +44,7 @@ class RPC {
             try {
                 return doRequest<T>(request)
             } catch (e: Throwable) {
-                if(e is IOException) {
+                if (e is IOException) {
                     return retryRequest<T>(request)
                 }
                 throw RuntimeException("Request failed: $request", e)
@@ -137,6 +137,13 @@ class RPC {
         suspend fun listAuctions(): List<RPCAuction> = getValue(
             RPCMethod.LIST_AUCTIONS,
             limit1000,
+        )
+
+        suspend fun getTokenBalances(): Map<String, Double> = getValue(
+            RPCMethod.GET_TOKEN_BALANCES,
+            JsonObject(mapOf()),
+            JsonPrimitive(true),
+            JsonPrimitive(true)
         )
     }
 }
