@@ -15,7 +15,7 @@ data class RPCAuctionBatch(
     val index: Int,
     val collaterals: List<String>,
     val loan: String,
-    val highestBid: RPCAuctionBid?
+    val highestBid: RPCAuctionBid? = null
 )
 
 @kotlinx.serialization.Serializable
