@@ -141,6 +141,7 @@ fun Application.configureRouting() {
                     val csv = when(filter.id) {
                         "PoolSwap" -> getPoolSwapsAsCSV(filter)
                         "PoolLiquidity" -> getPoolLiquidityAsCSV(filter)
+                        "Loan" -> getLoansAsCSV(filter)
                         else -> ""
                     }
                     call.respondText(csv, ContentType.Text.CSV)
@@ -167,6 +168,11 @@ fun Application.configureRouting() {
         post("/poolliquidity") {
             val filter = call.receive<SearchFilter>()
             val liquidity = searchPoolLiquidity(filter, 26)
+            call.respond(liquidity)
+        }
+        post("/loans") {
+            val filter = call.receive<SearchFilter>()
+            val liquidity = searchLoans(filter, 26)
             call.respond(liquidity)
         }
         get("/clear") {
