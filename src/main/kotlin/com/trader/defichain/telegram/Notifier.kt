@@ -1,9 +1,9 @@
 package com.trader.defichain.telegram
 
 import com.trader.defichain.db.search.DataType
-import com.trader.defichain.db.search.PoolHistoryFilter
+import com.trader.defichain.db.search.SearchFilter
 import com.trader.defichain.db.search.PoolSwapRow
-import com.trader.defichain.db.search.getPoolSwaps
+import com.trader.defichain.db.search.searchPoolSwaps
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
 import kotlinx.coroutines.delay
@@ -32,13 +32,13 @@ suspend fun notifyTelegramSubscribers(coroutineContext: CoroutineContext) {
 }
 
 private suspend fun broadcast() {
-    val rows = getPoolSwaps(
-        PoolHistoryFilter(
+    val rows = searchPoolSwaps(
+        SearchFilter(
             minBlock = blockHeight + 1
         ),
         DataType.LIST,
         500
-    ).rows
+    ).results
     val newBlockHeight = rows.maxOfOrNull { it.block?.blockHeight ?: blockHeight } ?: blockHeight
     var sentCount = 0
     for ((chatID, group) in notifications.groupBy { it.chatID }) {

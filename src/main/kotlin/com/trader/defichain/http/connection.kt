@@ -1,6 +1,6 @@
 package com.trader.defichain.http
 
-import com.trader.defichain.db.search.PoolHistoryFilter
+import com.trader.defichain.db.search.SearchFilter
 import com.trader.defichain.dex.PoolSwap
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -16,7 +16,7 @@ val connections: CopyOnWriteArrayList<Connection> = CopyOnWriteArrayList()
 class Connection {
 
     var description: String? = null
-    var filter: PoolHistoryFilter? = null
+    var filter: SearchFilter? = null
     val uuid = UUID.randomUUID().toString()
     private val writableChannel = Channel<String>(10, BufferOverflow.DROP_OLDEST)
     val poolSwaps = CopyOnWriteArrayList<PoolSwap>()

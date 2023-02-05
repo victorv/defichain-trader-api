@@ -242,6 +242,7 @@ private fun asSwap(
             time = time,
         ),
         priceImpact = 0.0,
+        blockHeight = block.height,
     )
 
     val (_, usdtFrom) = toUSDT(swap.fromAmount to getTokenId(row.tokenFrom)!!)

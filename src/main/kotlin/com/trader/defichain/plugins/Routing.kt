@@ -113,9 +113,9 @@ fun Application.configureRouting() {
             val description = call.request.queryParameters["description"]!!
             check(description.length < 150)
 
-            val filter = call.receive<PoolHistoryFilter>()
-            val poolSwaps = getPoolSwaps(filter, DataType.LIST, 1)
-            if (poolSwaps.rows.isEmpty()) {
+            val filter = call.receive<SearchFilter>()
+            val search = searchPoolSwaps(filter, DataType.LIST, 1)
+            if (search.results.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, "does not match any records")
                 return@post
             }
@@ -128,7 +128,7 @@ fun Application.configureRouting() {
             call.respond(HttpStatusCode.BadRequest, "invalid UUID")
         }
         post("/stats") {
-            val filter = call.receive<PoolHistoryFilter>()
+            val filter = call.receive<SearchFilter>()
             val stats = getStats(filter)
             call.respond(stats)
         }
@@ -138,7 +138,11 @@ fun Application.configureRouting() {
             if (connection != null) {
                 val filter = connection.filter
                 if (filter != null) {
-                    val csv = getPoolSwapsAsCSV(filter)
+                    val csv = when(filter.id) {
+                        "PoolSwap" -> getPoolSwapsAsCSV(filter)
+                        "PoolLiquidity" -> getPoolLiquidityAsCSV(filter)
+                        else -> ""
+                    }
                     call.respondText(csv, ContentType.Text.CSV)
                     return@get
                 }
@@ -151,14 +155,19 @@ fun Application.configureRouting() {
         }
         post("update") {
             val uuid = call.request.queryParameters["uuid"]!!
-            val filter = call.receive<PoolHistoryFilter>()
+            val filter = call.receive<SearchFilter>()
             setFilter(uuid, "#search-filter", filter)
             call.respond(HttpStatusCode.OK)
         }
         post("/poolswaps") {
-            val filter = call.receive<PoolHistoryFilter>()
-            val poolSwaps = getPoolSwaps(filter, DataType.LIST, 26)
+            val filter = call.receive<SearchFilter>()
+            val poolSwaps = searchPoolSwaps(filter, DataType.LIST, 26)
             call.respond(poolSwaps)
+        }
+        post("/poolliquidity") {
+            val filter = call.receive<SearchFilter>()
+            val liquidity = searchPoolLiquidity(filter, 26)
+            call.respond(liquidity)
         }
         get("/clear") {
             val response = getCachedTokens()
@@ -176,7 +185,7 @@ fun Application.configureRouting() {
 private fun setFilter(
     uuid: String,
     description: String,
-    filter: PoolHistoryFilter
+    filter: SearchFilter
 ): Boolean {
     for (connection in connections) {
         if (connection.uuid == uuid) {

@@ -1,7 +1,7 @@
 package com.trader.defichain.telegram
 
 import com.trader.defichain.appServerConfig
-import com.trader.defichain.db.search.PoolHistoryFilter
+import com.trader.defichain.db.search.SearchFilter
 import com.trader.defichain.db.search.PoolSwapRow
 import com.trader.defichain.dex.getTokenId
 import com.trader.defichain.dex.getTokenIdentifiers
@@ -61,7 +61,7 @@ interface Notification {
     val chatID: Long
     val uuid: String
     val description: String
-    val filter: PoolHistoryFilter
+    val filter: SearchFilter
 
     fun write()
 
@@ -77,7 +77,7 @@ data class PoolHistoryNotification(
     override val uuid: String,
     override val description: String,
     override val chatID: Long,
-    override val filter: PoolHistoryFilter,
+    override val filter: SearchFilter,
 ) : Notification {
 
     private val path = Paths.get(appServerConfig.accountsRoot).resolve("ph-$uuid.json")

@@ -1,21 +1,15 @@
 package com.trader.defichain.http
 
-import com.trader.defichain.db.search.PoolHistoryFilter
 import com.trader.defichain.dex.PoolSwap
 import io.ktor.http.*
 import io.ktor.server.application.*
-import io.ktor.server.request.*
 import io.ktor.server.response.*
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.GZIPOutputStream
 
 const val poolswapLimit = 10
