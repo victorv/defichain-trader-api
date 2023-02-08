@@ -43,13 +43,14 @@ RETURNING row_id;
 
 fun DBTX.insertBlock(block: Block, masterNode: Future<Long>, finalized: Boolean) = doLater {
     val minter = insertAddress(block.minter ?: "placeholderaddress")
+    val isBlockDirty = !finalized || isDirty
 
     connection.prepareStatement(template_insertBlock).use {
         it.setInt(1, block.height)
         it.setLong(2, block.medianTime)
         it.setString(3, block.hash)
         it.setBoolean(4, finalized)
-        it.setBoolean(5, !finalized)
+        it.setBoolean(5, isBlockDirty)
         it.setLong(6, masterNode.get())
         it.setLong(7, minter)
 

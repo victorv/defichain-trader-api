@@ -74,6 +74,7 @@ class DBTX(val description: String) {
 
     lateinit var connection: Connection
     private val actions = CopyOnWriteArrayList<suspend () -> Unit>()
+    var isDirty = false
 
     fun doLater(action: suspend () -> Unit) {
         actions.add(action)

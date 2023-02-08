@@ -195,6 +195,8 @@ private suspend fun indexZMQPair(
             val tokenAmount = AccountHistory.getPoolSwapResultFor(swap, block.height, txn)
             if (tokenAmount != null) {
                 swap.amountTo = tokenAmount
+            } else {
+                dbTX.isDirty = true
             }
             swap.path = getSwapPath(swap, customTX)
         }
@@ -209,9 +211,15 @@ private suspend fun indexZMQPair(
             amount = null,
         )
 
-        val shares = if (zmqPair.isConfirmed)
-            AccountHistory.getPoolLiquidityShares(addPoolLiquidity, block.height, txn) ?: sharesUnknown
-        else sharesUnknown
+        var shares = sharesUnknown
+        if (zmqPair.isConfirmed) {
+            val v = AccountHistory.getPoolLiquidityShares(addPoolLiquidity, block.height, txn)
+            if (v != null) {
+                shares = v
+            } else {
+                dbTX.isDirty = true
+            }
+        }
 
         dbTX.addPoolLiquidity(txRowID, addPoolLiquidity, shares)
     } else if (customTX.isRemovePoolLiquidity()) {
@@ -220,16 +228,24 @@ private suspend fun indexZMQPair(
         val idTokenA = pool.idTokenA
         val idTokenB = pool.idTokenB
 
-        val amounts = if (zmqPair.isConfirmed) AccountHistory.getPoolLiquidityAmounts(
-            removePoolLiquidity.owner,
-            block.height,
-            txn,
-            idTokenA,
-            idTokenB
-        ) else AccountHistory.PoolLiquidityAmounts(
+        var amounts = AccountHistory.PoolLiquidityAmounts(
             amountA = TokenIndex.TokenAmount(idTokenA, null),
             amountB = TokenIndex.TokenAmount(idTokenB, null),
         )
+        if (zmqPair.isConfirmed) {
+            val v = AccountHistory.getPoolLiquidityAmounts(
+                removePoolLiquidity.owner,
+                block.height,
+                txn,
+                idTokenA,
+                idTokenB
+            )
+            if (v != null) {
+                amounts = v
+            } else {
+                dbTX.isDirty = true
+            }
+        }
 
         dbTX.removePoolLiquidity(txRowID, removePoolLiquidity, amounts)
     } else if (customTX.isDepositToVault()) {
