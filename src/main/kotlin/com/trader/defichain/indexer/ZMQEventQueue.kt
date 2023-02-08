@@ -56,10 +56,15 @@ private suspend fun processEvent(event: ZMQEvent) {
                 )
 
                 val usdtPrices = oraclePrices.map {
+                    val tokenSymbol = getTokenSymbol(it.key)
+                    if (tokenSymbol == "USDT" || tokenSymbol == "USDC") {
+                        return@map it.key to 1.0
+                    }
+
                     it.key to testPoolSwap(
                         PoolSwap(
                             amountFrom = 1.0,
-                            tokenFrom = getTokenSymbol(it.key),
+                            tokenFrom = tokenSymbol,
                             tokenTo = "USDT",
                             desiredResult = 1.0,
                         )
