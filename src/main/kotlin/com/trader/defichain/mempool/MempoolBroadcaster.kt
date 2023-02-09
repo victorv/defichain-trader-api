@@ -12,10 +12,7 @@ import com.trader.defichain.zmq.ZMQEventType
 import com.trader.defichain.zmq.newZMQEventChannel
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.*
 import java.math.BigDecimal
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
@@ -69,7 +66,7 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 
                 val json = if (customTX.type == "PoolSwap")
                     asSwap(customTX, rawTX, fee, block, txn, time)
-                else asShortDescription(customTX, fee.floorPlain(), block, txn, time)
+                else describe(customTX, fee.floorPlain(), block, txn, time)
 
                 connections.forEach {
                     try {
@@ -95,8 +92,16 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
     }
 }
 
-fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn: Int, time: Long): JsonElement {
+fun describe(customTX: CustomTX.Record, fee: String, block: Block, txn: Int, time: Long): JsonElement {
     var modifiedFee = BigDecimal(fee)
+    val owner = when {
+        customTX.results.containsKey("owner") -> customTX.results["owner"]
+        customTX.results.containsKey("from") -> customTX.results["from"]
+        customTX.results.containsKey("shareaddress") -> customTX.results["shareaddress"]
+        customTX.results.containsKey("to") -> customTX.results["to"]
+        else -> null
+    }?.jsonPrimitive?.content ?: ""
+
     val details = when {
         customTX.isAuctionBid() -> {
             val v = customTX.asAuctionBid()
@@ -127,7 +132,7 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
         }
         customTX.isRemovePoolLiquidity() -> {
             val v = customTX.asRemovePoolLiquidity()
-            "${abs(v.shares)} ${getTokenSymbol(v.poolID)}" to 0.0
+            """<span class="amount">${abs(v.shares)}</span> <span class="token">${getTokenSymbol(v.poolID)}</span>""" to 0.0
         }
         customTX.isSetOracleData() -> {
             val v = customTX.asSetOracleData()
@@ -154,7 +159,7 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
     }
 
     return Json.encodeToJsonElement(
-        ShortDescription(
+        MempoolTXSummary(
             type = customTX.type,
             blockHeight = block.height,
             txn = txn,
@@ -162,39 +167,38 @@ fun asShortDescription(customTX: CustomTX.Record, fee: String, block: Block, txn
             fee = modifiedFee.floorPlain(),
             description = details.first,
             usdtAmount = details.second,
-            details = null
+            details = null,
+            owner = owner
         )
     )
 }
 
 private fun amountsAsString(amounts: List<Pair<Double, Int>>): Pair<String, Double> {
-    val usdtAmountsByToken = amounts
-        .filter { !hasPool(it.second) }
+    val validAmounts = amounts.filter { !hasPool(it.second) }
+    val usdSum = validAmounts.sumOf {
+        toUSDT(it)
+    }
+
+    val amountSummedByToken = validAmounts
         .map {
-            if (hasPool(it.second)) {
-                getTokenSymbol(it.second) to 0.0
-            } else {
-                val (swap, usdt) = toUSDT(it)
-                swap.tokenFrom to usdt
-            }
+            getTokenSymbol(it.second) to abs(it.first)
         }
         .groupBy { it.first }
-        .map { it.key to it.value.sumOf { swap -> swap.second } }
-    val usdtSum = usdtAmountsByToken.sumOf { it.second }
-    return usdtAmountsByToken.joinToString(", ") {
-        "$${it.second} ${it.first}"
-    } to (usdtSum * 100.0).roundToInt() / 100.0
+        .map { it.key to BigDecimal(it.value.sumOf { swap -> swap.second }).floorPlain() }
+
+    return amountSummedByToken.joinToString(", ") {
+        """<span class="amount">${it.second}</span> <span class="token">${it.first}</span>"""
+    } to (usdSum * 100.0).roundToInt() / 100.0
 }
 
-private fun toUSDT(it: Pair<Double, Int>): Pair<PoolSwap, Double> {
+private fun toUSDT(it: Pair<Double, Int>): Double {
     val swap = PoolSwap(
         tokenFrom = getTokenSymbol(it.second),
         amountFrom = abs(it.first),
         tokenTo = "USDT",
         desiredResult = 1.0,
     )
-    val usdt = (testPoolSwap(swap).estimate * 100.0).roundToInt() / 100.0
-    return Pair(swap, usdt)
+    return (testPoolSwap(swap).estimate * 100.0).roundToInt() / 100.0
 }
 
 private fun asSwap(
@@ -213,21 +217,19 @@ private fun asSwap(
         desiredResult = 1.0,
     )
 
-    val amountTo = testPoolSwap(mempoolSwap).estimate
+    val amountTo = BigDecimal(testPoolSwap(mempoolSwap).estimate).floorPlain()
 
     val fromOraclePrice = getOraclePrice(swap.fromToken)
     val fromAmountUSD = (fromOraclePrice ?: 0.0) * swap.fromAmount
-    val toOraclePrice = getOraclePrice(swap.toToken)
-    val toAmountUSD = (toOraclePrice ?: 0.0) * amountTo
 
     val tokenTo = getTokenSymbol(swap.toToken)
     val row = PoolSwapRow(
         fromAmountUSD = fromAmountUSD,
-        toAmountUSD = toAmountUSD,
+        toAmountUSD = 0.0,
         txID = rawTX.txID,
         fee = fee.floorPlain(),
         amountFrom = BigDecimal(swap.fromAmount).floorPlain(),
-        amountTo = BigDecimal(amountTo).floorPlain(),
+        amountTo = amountTo,
         tokenFrom = getTokenSymbol(swap.fromToken),
         tokenTo = tokenTo,
         tokenToAlt = tokenTo,
@@ -245,24 +247,27 @@ private fun asSwap(
         blockHeight = block.height,
     )
 
-    val (_, usdtFrom) = toUSDT(swap.fromAmount to getTokenId(row.tokenFrom)!!)
-    val (_, usdtTo) = if (amountTo == 0.0) null to 0.0 else toUSDT(amountTo to getTokenId(row.tokenTo)!!)
+    val fromDesc = """<span class="amount">${row.amountFrom}</span> <span class="token">${row.tokenFrom}</span>"""
+    val toDesc = """<span class="amount">$amountTo</span> <span class="token">${row.tokenTo}</span>"""
+
+    val usdValue = toUSDT(swap.fromAmount to getTokenId(row.tokenFrom)!!)
     return Json.encodeToJsonElement(
-        ShortDescription(
+        MempoolTXSummary(
             type = customTX.type,
             blockHeight = block.height,
             txn = txn,
             time = time,
             fee = row.fee,
-            description = "$$usdtFrom ${row.tokenFrom} to $$usdtTo ${row.tokenTo}",
+            description = "$fromDesc to $toDesc",
             details = Json.encodeToJsonElement(row),
-            usdtAmount = usdtFrom,
+            usdtAmount = usdValue,
+            owner = row.from
         )
     )
 }
 
 @kotlinx.serialization.Serializable
-data class ShortDescription(
+data class MempoolTXSummary(
     val type: String,
     val fee: String,
     val description: String,
@@ -270,5 +275,6 @@ data class ShortDescription(
     val usdtAmount: Double,
     val txn: Int,
     val time: Long,
+    val owner: String,
     val details: JsonElement?
 )
