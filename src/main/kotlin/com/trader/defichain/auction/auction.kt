@@ -1,10 +1,11 @@
 package com.trader.defichain.auction
 
 import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.SwapResult
 import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
+import com.trader.defichain.util.floorPlain
+import java.math.BigDecimal
 
 fun parseTokenAmount(text: String): TokenAmount {
     val (amount, token) = text.split("@")
@@ -32,7 +33,7 @@ suspend fun listAuctions(): ArrayList<Auction> {
         for (rpcBatch in rpcAuction.batches) {
 
             val loan = parseTokenAmount(rpcBatch.loan)
-            var minimumBid = loan.value * (1.0 + rpcAuction.liquidationPenalty / 100.0)
+            var minBid = loan.value * (1.0 + rpcAuction.liquidationPenalty / 100.0)
             var highestBid: AuctionBid? = null
             if (rpcBatch.highestBid != null) {
                 val bidAmount = parseTokenAmount(rpcBatch.highestBid.amount)
@@ -40,52 +41,39 @@ suspend fun listAuctions(): ArrayList<Auction> {
                     amount = bidAmount,
                     owner = rpcBatch.highestBid.owner,
                 )
-                minimumBid = bidAmount.value * 1.0101
+                minBid = bidAmount.value * 1.0101
             }
 
             val collaterals = ArrayList<Collateral>()
             for (rpcCollateral in rpcBatch.collaterals) {
                 val tokenAmount = parseTokenAmount(rpcCollateral)
-                val toLoan =
-                    if (tokenAmount.value == 0.0) null
-                    else if (tokenAmount.token == loan.token) null
+                val asLoanToken =
+                    if (tokenAmount.token == loan.token) tokenAmount.value
                     else testPoolSwap(
                         PoolSwap(
                             amountFrom = tokenAmount.value,
                             tokenFrom = tokenAmount.token,
                             tokenTo = loan.token,
-                            desiredResult = minimumBid,
+                            desiredResult = minBid,
                         )
-                    )
-
-                val fromLoan = if (tokenAmount.value == 0.0) null
-                else if (tokenAmount.token == loan.token) null
-                else testPoolSwap(
-                    PoolSwap(
-                        amountFrom = minimumBid,
-                        tokenFrom = loan.token,
-                        tokenTo = tokenAmount.token,
-                        desiredResult = tokenAmount.value,
-                    )
-                )
+                    ).estimate
 
                 val collateral = Collateral(
                     tokenAmount = tokenAmount,
-                    swapFromLoan = fromLoan,
-                    swapToLoan = toLoan,
+                    loanTokenAmount = BigDecimal(asLoanToken).floorPlain(),
                 )
                 collaterals.add(collateral)
             }
 
-            val maximumBid = collaterals.sumOf { it.swapToLoan?.estimate ?: 0.0 }
+            val max = collaterals.sumOf { it.loanTokenAmount.toDouble() }
 
             val batch = AuctionBatch(
                 index = rpcBatch.index,
                 loan = loan,
                 collaterals = collaterals,
                 highestBid = highestBid,
-                minimumBid = minimumBid,
-                maximumBid = maximumBid
+                minBid = BigDecimal(minBid).floorPlain(),
+                maxBid = BigDecimal(max).floorPlain()
             )
             batches.add(batch)
         }
@@ -118,8 +106,7 @@ data class TokenAmount(
 @kotlinx.serialization.Serializable
 data class Collateral(
     val tokenAmount: TokenAmount,
-    val swapToLoan: SwapResult?,
-    val swapFromLoan: SwapResult?,
+    val loanTokenAmount: String,
 )
 
 @kotlinx.serialization.Serializable
@@ -134,8 +121,8 @@ data class AuctionBatch(
     val collaterals: List<Collateral>,
     val loan: TokenAmount,
     val highestBid: AuctionBid?,
-    val minimumBid: Double,
-    val maximumBid: Double,
+    val minBid: String,
+    val maxBid: String,
 )
 
 @kotlinx.serialization.Serializable
