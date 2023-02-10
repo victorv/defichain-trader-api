@@ -94,13 +94,21 @@ suspend fun sendMempoolEvents(coroutineContext: CoroutineContext) {
 
 fun describe(customTX: CustomTX.Record, fee: String, block: Block, txn: Int, time: Long): JsonElement {
     var modifiedFee = BigDecimal(fee)
+
     val owner = when {
-        customTX.results.containsKey("owner") -> customTX.results["owner"]
-        customTX.results.containsKey("from") -> customTX.results["from"]
-        customTX.results.containsKey("shareaddress") -> customTX.results["shareaddress"]
-        customTX.results.containsKey("to") -> customTX.results["to"]
+        customTX.results.containsKey("owner") -> customTX.results["owner"]?.jsonPrimitive?.content
+        customTX.results.containsKey("from") -> {
+            val owner = customTX.results["from"]
+            if (owner is JsonObject) {
+                val addresses = owner.entries.map { it.key }
+                if (addresses.size == 1) addresses.first() else "${addresses.size} addresses"
+            }
+            else owner?.jsonPrimitive?.content
+        }
+        customTX.results.containsKey("shareaddress") -> customTX.results["shareaddress"]?.jsonPrimitive?.content
+        customTX.results.containsKey("to") -> customTX.results["to"]?.jsonPrimitive?.content
         else -> null
-    }?.jsonPrimitive?.content ?: ""
+    } ?: ""
 
     val details = when {
         customTX.isAuctionBid() -> {
