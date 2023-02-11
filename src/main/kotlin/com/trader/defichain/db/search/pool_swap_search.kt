@@ -8,6 +8,7 @@ import com.trader.defichain.util.floorPlain
 import com.trader.defichain.util.get
 import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
+import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.ResultSet
 import java.time.LocalDateTime
@@ -424,6 +425,28 @@ private fun getPoolSwapRow(resultSet: ResultSet, dataType: DataType): PoolSwapRo
     val vAmountFrom = amountFrom.toDouble()
     val vAmountTo = amountTo.toDouble()
 
+    val dusdSwap = if (vAmountFrom == 0.0 || dataType == DataType.CSV) 0.0
+    else if (tokenFrom == "DUSD") vAmountFrom
+    else testPoolSwap(
+        PoolSwap(
+            amountFrom = vAmountFrom,
+            tokenFrom = tokenFrom,
+            tokenTo = "DUSD",
+            desiredResult = 1.0,
+        )
+    ).estimate
+
+    val dusdInverseSwap = if (vAmountTo == 0.0 || dataType == DataType.CSV) 0.0
+    else if (tokenTo == "DUSD") vAmountTo
+    else testPoolSwap(
+        PoolSwap(
+            amountFrom = vAmountTo,
+            tokenFrom = tokenTo,
+            tokenTo = "DUSD",
+            desiredResult = 1.0,
+        )
+    ).estimate
+
     val usdtSwap = if (vAmountFrom == 0.0 || dataType == DataType.CSV) null
     else testPoolSwap(
         PoolSwap(
@@ -481,6 +504,8 @@ private fun getPoolSwapRow(resultSet: ResultSet, dataType: DataType): PoolSwapRo
         swap = swap,
         inverseSwap = inverseSwap,
         priceImpact = 0.0,
+        dusd = BigDecimal(dusdSwap).floorPlain(),
+        inverseDUSD = BigDecimal(dusdInverseSwap).floorPlain(),
         fromAmountUSD = usdtSwap?.estimate ?: 0.0,
         toAmountUSD = usdtInverseSwap?.estimate ?: 0.0,
         blockHeight = blockEntry?.blockHeight ?: mempoolEntry?.blockHeight ?: -1
@@ -524,6 +549,8 @@ data class PoolSwapRow(
     val fromAmountUSD: Double,
     val toAmountUSD: Double,
     val blockHeight: Int,
+    val dusd: String = "0.0",
+    val inverseDUSD: String = "0.0",
 )
 
 @kotlinx.serialization.Serializable
