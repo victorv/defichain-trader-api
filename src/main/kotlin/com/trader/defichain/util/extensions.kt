@@ -65,7 +65,8 @@ fun BigDecimal.floor() = this.setScale(8, RoundingMode.FLOOR).toDouble()
 
 fun BigDecimal.up() = this.setScale(8, RoundingMode.UP).toDouble()
 
-fun BigDecimal.floorPlain(): String = this.setScale(8, RoundingMode.FLOOR).toPlainString()
+fun BigDecimal.floorPlain() = floorPlain(8)
+fun BigDecimal.floorPlain(scale: Int): String = this.setScale(scale, RoundingMode.FLOOR).toPlainString()
 
 fun <T> List<T>.containsSwapPath(other: List<T>): Boolean {
     if (this === other || other.isEmpty() || other.size > this.size) {
