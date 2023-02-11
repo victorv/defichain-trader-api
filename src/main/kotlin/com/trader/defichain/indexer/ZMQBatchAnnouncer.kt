@@ -50,10 +50,11 @@ private suspend fun announceZMQBatch(block: Block, rawTransactions: List<ZMQRawT
 
 private suspend fun asZMQBatch(block: Block, rawTransactions: List<ZMQRawTX>): ZMQBatch {
     val mintedByHex = block.tx.associateBy { it.hex }.toMutableMap()
+    val mintedTXIDs = block.tx.map { it.txID }.toSet()
     val transactionPairs = ArrayList<ZMQPair>(rawTransactions.size)
     for (rawTX in rawTransactions) {
 
-        val mintedTX = mintedByHex[rawTX.hex]
+        var mintedTX = mintedByHex[rawTX.hex]
         val tx = mintedTX ?: RPC.getValue(
             RPCMethod.DECODE_RAW_TRANSACTION,
             JsonPrimitive(rawTX.hex)
@@ -61,7 +62,7 @@ private suspend fun asZMQBatch(block: Block, rawTransactions: List<ZMQRawTX>): Z
         tx.hex = tx.hex ?: rawTX.hex
 
         mintedByHex.remove(rawTX.hex)
-        transactionPairs.add(ZMQPair(rawTX, tx, mintedTX != null))
+        transactionPairs.add(ZMQPair(rawTX, tx, mintedTXIDs.contains(tx.txID)))
     }
 
     for (tx in mintedByHex.values) {
