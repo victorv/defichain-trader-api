@@ -128,8 +128,9 @@ fun Application.configureRouting() {
             call.respond(HttpStatusCode.BadRequest, "invalid UUID")
         }
         post("/stats") {
+            val byAddress = call.parameters["byAddress"] == "true"
             val filter = call.receive<SearchFilter>()
-            val stats = getStats(filter)
+            val stats = if (byAddress) getStatsByAddress(filter) else getStats(filter)
             call.respond(stats)
         }
         get("/download") {

@@ -15,7 +15,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 @Language("sql")
-private val template_selectStats = """
+private val statsCommon = """
 with latest_oracle as (
 select token, max(block_height) as block_height from oracle_price group by token
 ),
@@ -49,6 +49,28 @@ swaps as (
   (:token_from) AND
   (:token_to)
  order by m.block_height DESC, m.txn limit 26 offset 0)
+""".trimIndent()
+
+@Language("sql")
+private val template_selectStatsByAddress = """
+$statsCommon
+select
+count(*) as tx_count,
+sum(amount_from) as amount_from, 
+sum(amount_from_usd) as amount_from_usd, 
+sum(amount_to) as amount_to, 
+sum(amount_to_usd) as amount_to_usd, 
+a.dc_address as address
+from pool_swap
+inner join swaps on swaps.tx_row_id = pool_swap.tx_row_id
+inner join address a on pool_swap."from" = a.row_id
+group by a.dc_address
+order by sum(amount_from_usd) DESC limit 250;
+""".trimIndent()
+
+@Language("sql")
+private val template_selectStats = """
+$statsCommon
 select
 count(*) as tx_count,
 sum(amount_from) as amount_from, 
@@ -206,6 +228,42 @@ fun toShortMillis(epoch: Long?): Long? {
     }
     return null
 }
+
+fun getStatsByAddress(filter: SearchFilter): List<SwapStatsByAddress> {
+    connectionPool.connection.use { connection ->
+        val (parameters, sql) = createQuery(filter, connection, template_selectStatsByAddress, 25000)
+
+        connection.prepareStatement(sql, parameters).use { statement ->
+            statement.executeQuery().use { resultSet ->
+
+                val stats = ArrayList<SwapStatsByAddress>()
+                while (resultSet.next()) {
+                    val amountFrom = resultSet.get<Double>("amount_from")
+                    val amountSoldUSD = resultSet.get<Double>("amount_from_usd")
+
+                    val amountTo = resultSet.get<Double>("amount_to")
+                    val amountBoughtUSD = resultSet.get<Double>("amount_to_usd")
+
+                    val address = resultSet.get<String>("address")
+                    val txCount = resultSet.get<Int>("tx_count")
+
+                    stats.add(
+                        SwapStatsByAddress(
+                            txCount = txCount,
+                            address = address,
+                            inputAmount = amountFrom,
+                            inputAmountUSD = amountSoldUSD,
+                            outputAmount = amountTo,
+                            outputAmountUSD = amountBoughtUSD
+                        )
+                    )
+                }
+                return stats
+            }
+        }
+    }
+}
+
 
 fun getStats(filter: SearchFilter): List<TokenStats> {
     connectionPool.connection.use { connection ->
@@ -473,6 +531,20 @@ data class Pager(
     val maxBlockHeight: Int,
     val blacklist: List<Long>,
 )
+
+@kotlinx.serialization.Serializable
+data class SwapStatsByAddress(
+    val address: String,
+    var txCount: Int,
+    val inputAmount: Double,
+    val inputAmountUSD: Double,
+    val outputAmount: Double,
+    val outputAmountUSD: Double,
+) : Comparable<SwapStats> {
+    override fun compareTo(other: SwapStats): Int {
+        return if (inputAmountUSD < other.inputAmountUSD) 1 else -1
+    }
+}
 
 @kotlinx.serialization.Serializable
 data class SwapStats(
