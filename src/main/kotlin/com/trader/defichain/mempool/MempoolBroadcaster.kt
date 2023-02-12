@@ -232,27 +232,29 @@ private fun asSwap(
 
     val tokenTo = getTokenSymbol(swap.toToken)
     val row = PoolSwapRow(
-        fromAmountUSD = fromAmountUSD,
-        toAmountUSD = 0.0,
         txID = rawTX.txID,
         fee = fee.floorPlain(),
         amountFrom = BigDecimal(swap.fromAmount).floorPlain(),
         amountTo = amountTo,
         tokenFrom = getTokenSymbol(swap.fromToken),
         tokenTo = tokenTo,
-        tokenToAlt = tokenTo,
         maxPrice = BigDecimal(swap.maxPrice).floorPlain(),
         from = swap.fromAddress,
         to = swap.toAddress,
         block = null,
-        id = -1,
         mempool = MempoolEntry(
             blockHeight = block.height,
             txn = txn,
             time = time,
         ),
+        tokenToAlt = tokenTo,
+        id = -1,
         priceImpact = 0.0,
+        fromAmountUSD = fromAmountUSD,
+        toAmountUSD = 0.0,
         blockHeight = block.height,
+        dusd = "0.0",
+        inverseDUSD = "0.0",
     )
 
     val fromDesc = """<span class="amount">${row.amountFrom}</span> <span class="token">${row.tokenFrom}</span>"""
