@@ -35,7 +35,7 @@ order by pool_pair.block_height DESC
 @Language("sql")
 private val template_swaps = """
 select
-amount_to / amount_from as estimate,
+(case when token_from = :token_from AND token_to = :token_to then amount_to / amount_from else amount_from / amount_to end) as estimate,
 time as block_time
 from pool_swap
 inner join minted_tx mt on pool_swap.tx_row_id = mt.tx_row_id
@@ -43,8 +43,10 @@ inner join block b on mt.block_height = b.height
 where 
 path = :path AND
 block_height >= :min_block_height AND
-token_from = :token_from AND
-token_to = :token_to AND
+(
+ (token_from = :token_from AND token_to = :token_to) OR
+ (token_to = :token_from AND token_from = :token_to)
+) AND
 amount_from > 0.000001 AND
 amount_to > 0.0001
 """.trimIndent()
