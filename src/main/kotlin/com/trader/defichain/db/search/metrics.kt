@@ -47,8 +47,8 @@ block_height >= :min_block_height AND
  (token_from = :token_from AND token_to = :token_to) OR
  (token_to = :token_from AND token_from = :token_to)
 ) AND
-amount_from > 0.000001 AND
-amount_to > 0.0001
+amount_from > 0.0005 AND
+amount_to > 0.0005
 """.trimIndent()
 
 private const val LIMIT = 100
