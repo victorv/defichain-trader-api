@@ -3,8 +3,12 @@ package com.trader.defichain.plugins
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.auction.listAuctions
 import com.trader.defichain.db.search.*
-import com.trader.defichain.dex.*
+import com.trader.defichain.dex.PoolSwap
+import com.trader.defichain.dex.getCachedPoolPairs
+import com.trader.defichain.dex.getCachedTokens
+import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.http.*
+import com.trader.defichain.telegram.notifications
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
@@ -18,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import java.io.File
 
@@ -160,6 +165,25 @@ fun Application.configureRouting() {
             val filter = call.receive<SearchFilter>()
             setFilter(uuid, "#search-filter", filter)
             call.respond(HttpStatusCode.OK)
+        }
+        get("filter") {
+            val uuid = call.request.queryParameters["uuid"]
+            val blockRange = call.request.queryParameters["blockRange"]
+            if (uuid != null && blockRange != null) {
+                val (minBlockHeight, maxBlockHeight) = blockRange.split("-")
+                for (notification in notifications) {
+                    if (notification.uuid == uuid) {
+                        val filter = notification.filter
+                        call.respond(filter.copy(
+                            minBlock = minBlockHeight.toInt(),
+                            maxBlock = maxBlockHeight.toInt(),
+                        ))
+                        return@get
+                    }
+                }
+            }
+            call.respond(JsonObject(mapOf()))
+            return@get
         }
         post("/poolswaps") {
             val filter = call.receive<SearchFilter>()

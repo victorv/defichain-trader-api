@@ -255,6 +255,8 @@ private fun asSwap(
         blockHeight = block.height,
         dusd = "0.0",
         inverseDUSD = "0.0",
+        usdt = "",
+        inverseUSDT = "0.0",
     )
 
     val fromDesc = """<span class="amount">${row.amountFrom}</span> <span class="token">${row.tokenFrom}</span>"""

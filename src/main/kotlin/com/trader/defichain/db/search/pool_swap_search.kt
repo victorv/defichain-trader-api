@@ -3,10 +3,7 @@ package com.trader.defichain.db.search
 import com.trader.defichain.db.DB
 import com.trader.defichain.db.connectionPool
 import com.trader.defichain.dex.*
-import com.trader.defichain.util.SQLValue
-import com.trader.defichain.util.floorPlain
-import com.trader.defichain.util.get
-import com.trader.defichain.util.prepareStatement
+import com.trader.defichain.util.*
 import org.intellij.lang.annotations.Language
 import java.math.BigDecimal
 import java.sql.Connection
@@ -504,6 +501,8 @@ private fun getPoolSwapRow(resultSet: ResultSet, dataType: DataType): PoolSwapRo
         swap = swap,
         inverseSwap = inverseSwap,
         priceImpact = 0.0,
+        usdt = asUSDT(vAmountFrom, tokenFrom),
+        inverseUSDT = asUSDT(vAmountTo, tokenTo),
         dusd = BigDecimal(dusdSwap).floorPlain(),
         inverseDUSD = BigDecimal(dusdInverseSwap).floorPlain(),
         fromAmountUSD = usdtSwap?.estimate ?: 0.0,
@@ -549,8 +548,10 @@ data class PoolSwapRow(
     val fromAmountUSD: Double,
     val toAmountUSD: Double,
     val blockHeight: Int,
-    val dusd: String = "0.0",
-    val inverseDUSD: String = "0.0",
+    val dusd: String,
+    val inverseDUSD: String,
+    val usdt: String,
+    val inverseUSDT: String,
 )
 
 @kotlinx.serialization.Serializable

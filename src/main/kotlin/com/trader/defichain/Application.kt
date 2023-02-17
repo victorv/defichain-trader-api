@@ -45,20 +45,18 @@ fun main(vararg args: String) {
     }
 
     if (appServerConfig.production) {
-        if(!appServerConfig.local) {
-            println("Launching Telegram account authenticator")
+        println("Launching Telegram account authenticator")
 
-            GlobalScope.launch {
-                broadcastTelegramMessages(coroutineContext)
-            }
+        GlobalScope.launch {
+            broadcastTelegramMessages(coroutineContext)
+        }
 
-            GlobalScope.launch {
-                approveNewNotifications(coroutineContext)
-            }
+        GlobalScope.launch {
+            approveNewNotifications(coroutineContext)
+        }
 
-            GlobalScope.launch {
-                notifyTelegramSubscribers(coroutineContext)
-            }
+        GlobalScope.launch {
+            notifyTelegramSubscribers(coroutineContext)
         }
         loadNotifications()
     }

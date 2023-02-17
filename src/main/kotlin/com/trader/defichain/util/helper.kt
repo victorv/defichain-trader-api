@@ -1,6 +1,33 @@
 package com.trader.defichain.util
 
+import com.trader.defichain.dex.PoolSwap
+import com.trader.defichain.dex.testPoolSwap
+import java.math.BigDecimal
+
 val version = "^v\\d$".toRegex()
+
+fun asUSDT(amountFrom: Double, tokenSymbol: String): String {
+    var estimate = amountFrom
+    if (amountFrom != 0.0 && tokenSymbol != "USDT" && tokenSymbol != "USDC") {
+        estimate = testPoolSwap(
+            PoolSwap(
+                amountFrom = amountFrom,
+                tokenFrom = tokenSymbol,
+                tokenTo = "USDT",
+                desiredResult = 1.0,
+            )
+        ).estimate
+    }
+
+    if (estimate < 0.01) {
+        return "0"
+    }
+    if (estimate < 100.0) {
+        return BigDecimal(estimate).floorPlain(2)
+    }
+    return BigDecimal(estimate).floorPlain(0)
+}
+
 fun List<String>.joinVersions(): List<String> {
     val joined = ArrayList<String>(this.size)
     for(value in this) {

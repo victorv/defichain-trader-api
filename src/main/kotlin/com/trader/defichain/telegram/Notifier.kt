@@ -1,11 +1,13 @@
 package com.trader.defichain.telegram
 
+import com.trader.defichain.appServerConfig
 import com.trader.defichain.db.search.DataType
 import com.trader.defichain.db.search.SearchFilter
 import com.trader.defichain.db.search.PoolSwapRow
 import com.trader.defichain.db.search.searchPoolSwaps
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
+import com.trader.defichain.util.asUSDT
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
@@ -78,6 +80,14 @@ private suspend fun broadcast() {
     blockHeight = newBlockHeight
 }
 
+fun round(num: String): String {
+    val d = num.toDouble()
+    val decimalPlaces = if (d < 0.01) 8
+    else 0.coerceAtLeast(6 - d.toInt().toString().length)
+    val formatString = "%." + decimalPlaces + "f"
+    return String.format(formatString, num.toDouble())
+}
+
 private fun createMessage(
     matches: List<PoolSwapRow>,
     blocks: Set<Int>,
@@ -87,9 +97,12 @@ private fun createMessage(
         mutableListOf("""<strong>${notification.description}</strong>""")
     for (match in matches.sortedByDescending { it.fromAmountUSD }
         .slice(IntRange(0, min(matchLimit - 1, matches.size - 1)))) {
-        val amountFromUSD = (match.fromAmountUSD * 100.0).roundToInt() / 100.0
-        val amountToUSD = (match.toAmountUSD * 100.0).roundToInt() / 100.0
-        message += """$$amountFromUSD ${match.tokenFrom} to $${amountToUSD} ${match.tokenTo} <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
+        val amountFromUSD = asUSDT(match.amountFrom.toDouble(), match.tokenFrom)
+        val amountFrom = round(match.amountFrom)
+        val amountTo = round(match.amountTo ?: "0.0")
+
+        message += """$amountFrom ${match.tokenFrom} to $amountTo ${match.tokenTo}"""
+        message += """$$amountFromUSD <a href="https://defiscan.live/transactions/${match.txID}">defiscan</a>"""
     }
 
     if (matches.size > matchLimit) {
@@ -108,5 +121,10 @@ private fun createMessage(
             """<strong>blocks:</strong> ${blockLinks.joinToString(", ")}"""
         }
     }
+
+    val domain = if(appServerConfig.local) "http://127.0.0.1:8085" else "https://defichain-trader.com"
+    val blockRange = "${blocks.first()}-${blocks.last()}"
+    val url = "$domain?uuid=${notification.uuid}&blockRange=${blockRange}#explore/PoolSwap"
+    message += """<a href="$url">view all</a>"""
     return message
 }
