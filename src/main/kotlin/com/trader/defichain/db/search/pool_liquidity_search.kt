@@ -1,6 +1,7 @@
 package com.trader.defichain.db.search
 
 import com.trader.defichain.db.connectionPool
+import com.trader.defichain.util.DATE_TIME_PATTERN
 import com.trader.defichain.util.prepareStatement
 import org.intellij.lang.annotations.Language
 import java.time.LocalDateTime
@@ -41,7 +42,7 @@ order by minted_tx.block_height DESC, minted_tx.txn limit 26 offset 0
 """.trimIndent()
 
 fun getPoolLiquidityAsCSV(filter: SearchFilter): String {
-    val dateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")
+    val dateTimeFormat = DateTimeFormatter.ofPattern(DATE_TIME_PATTERN)
 
     val results = searchPoolLiquidity(filter, 5000).results
     val csv = java.lang.StringBuilder()

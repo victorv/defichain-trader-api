@@ -4,6 +4,7 @@ import com.trader.defichain.dex.PoolSwap
 import com.trader.defichain.dex.testPoolSwap
 import java.math.BigDecimal
 
+const val DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss"
 val version = "^v\\d$".toRegex()
 
 fun asUSDT(amountFrom: Double, tokenSymbol: String): String {
