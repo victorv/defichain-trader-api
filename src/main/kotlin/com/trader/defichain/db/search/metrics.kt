@@ -120,8 +120,9 @@ fun getMetrics(poolSwap: AbstractPoolSwap, candleTime: Long, path: Int): List<Li
                         .breakdown
                         .first { it.path == path }
                         .estimate
+                    val avgPrice = estimate / poolSwap.amountFrom
 
-                    addCandle(candleTime, byTime, estimate, time)
+                    addCandle(candleTime, byTime, avgPrice, time)
                 }
             }
         }
