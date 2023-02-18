@@ -7,6 +7,15 @@ import java.math.BigDecimal
 const val DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss"
 val version = "^v\\d$".toRegex()
 
+fun round(num: Double) = round(num.toString())
+fun round(num: String): String {
+    val d = num.toDouble()
+    val decimalPlaces = if (d < 0.01) 8
+    else 0.coerceAtLeast(6 - d.toInt().toString().length)
+    val formatString = "%." + decimalPlaces + "f"
+    return String.format(formatString, num.toDouble())
+}
+
 fun asUSDT(amountFrom: Double, tokenSymbol: String): String {
     var estimate = amountFrom
     if (amountFrom != 0.0 && tokenSymbol != "USDT" && tokenSymbol != "USDC") {

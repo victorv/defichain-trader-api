@@ -8,6 +8,7 @@ import com.trader.defichain.db.search.searchPoolSwaps
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.rpc.RPCMethod
 import com.trader.defichain.util.asUSDT
+import com.trader.defichain.util.round
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
@@ -15,7 +16,6 @@ import org.slf4j.LoggerFactory
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 private var blockHeight = runBlocking { RPC.getValue<Int>(RPCMethod.GET_BLOCK_COUNT) }
 private val logger = LoggerFactory.getLogger("telegram")
@@ -78,14 +78,6 @@ private suspend fun broadcast() {
     logger.info("tested ${notifications.size} against ${rows.size} results in block range [$blockHeight - $newBlockHeight] resulting in $sentCount scheduled alerts")
 
     blockHeight = newBlockHeight
-}
-
-fun round(num: String): String {
-    val d = num.toDouble()
-    val decimalPlaces = if (d < 0.01) 8
-    else 0.coerceAtLeast(6 - d.toInt().toString().length)
-    val formatString = "%." + decimalPlaces + "f"
-    return String.format(formatString, num.toDouble())
 }
 
 private fun createMessage(

@@ -229,7 +229,7 @@ fun toShortMillis(epoch: Long?): Long? {
 
 fun getStatsByAddress(filter: SearchFilter): List<SwapStatsByAddress> {
     connectionPool.connection.use { connection ->
-        val (parameters, sql) = createQuery(filter, connection, template_selectStatsByAddress, 25000)
+        val (parameters, sql) = createQuery(filter, connection, template_selectStatsByAddress, 15000)
 
         connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
@@ -249,10 +249,10 @@ fun getStatsByAddress(filter: SearchFilter): List<SwapStatsByAddress> {
                         SwapStatsByAddress(
                             txCount = txCount,
                             address = address,
-                            inputAmount = amountFrom,
-                            inputAmountUSD = amountSoldUSD,
-                            outputAmount = amountTo,
-                            outputAmountUSD = amountBoughtUSD
+                            inputAmount = round(amountFrom),
+                            inputAmountUSD = round(amountSoldUSD),
+                            outputAmount = round(amountTo),
+                            outputAmountUSD = round(amountBoughtUSD)
                         )
                     )
                 }
@@ -265,7 +265,7 @@ fun getStatsByAddress(filter: SearchFilter): List<SwapStatsByAddress> {
 
 fun getStats(filter: SearchFilter): List<TokenStats> {
     connectionPool.connection.use { connection ->
-        val (parameters, sql) = createQuery(filter, connection, template_selectStats, 25000)
+        val (parameters, sql) = createQuery(filter, connection, template_selectStats, 15000)
 
         connection.prepareStatement(sql, parameters).use { statement ->
             statement.executeQuery().use { resultSet ->
@@ -564,13 +564,13 @@ data class Pager(
 data class SwapStatsByAddress(
     val address: String,
     var txCount: Int,
-    val inputAmount: Double,
-    val inputAmountUSD: Double,
-    val outputAmount: Double,
-    val outputAmountUSD: Double,
+    val inputAmount: String,
+    val inputAmountUSD: String,
+    val outputAmount: String,
+    val outputAmountUSD: String,
 ) : Comparable<SwapStats> {
     override fun compareTo(other: SwapStats): Int {
-        return if (inputAmountUSD < other.inputAmountUSD) 1 else -1
+        return if (inputAmountUSD.toDouble() < other.inputAmountUSD) 1 else -1
     }
 }
 
