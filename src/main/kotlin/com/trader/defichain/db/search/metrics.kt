@@ -43,10 +43,7 @@ inner join block b on mt.block_height = b.height
 where 
 path = :path AND
 block_height >= :min_block_height AND
-(
- (token_from = :token_from AND token_to = :token_to) OR
- (token_to = :token_from AND token_from = :token_to)
-) AND
+token_from = :token_from AND token_to = :token_to AND
 amount_from > 0.01 AND
 amount_to > 0.01
 """.trimIndent()
