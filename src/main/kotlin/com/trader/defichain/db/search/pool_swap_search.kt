@@ -57,10 +57,16 @@ count(*) as tx_count,
 sum(amount_from) as amount_from, 
 sum(amount_from_usd) as amount_from_usd, 
 sum(amount_to) as amount_to, 
-sum(amount_to_usd) as amount_to_usd, 
+sum(amount_to_usd) as amount_to_usd,
+max(time) as max_time,
+min(time) as min_time,
+min(block_height) as min_block_height,
+max(block_height) as max_block_height,
 a.dc_address as address
 from pool_swap
 inner join swaps on swaps.tx_row_id = pool_swap.tx_row_id
+inner join minted_tx mt on pool_swap.tx_row_id = mt.tx_row_id
+inner join block on block_height=block.height
 inner join address a on pool_swap."from" = a.row_id
 group by a.dc_address
 order by sum(amount_from_usd) DESC limit 250;
@@ -242,6 +248,11 @@ fun getStatsByAddress(filter: SearchFilter): List<SwapStatsByAddress> {
                     val amountTo = resultSet.get<Double>("amount_to")
                     val amountBoughtUSD = resultSet.get<Double>("amount_to_usd")
 
+                    val minBlockHeight = resultSet.get<Int>("min_block_height")
+                    val maxBlockHeight = resultSet.get<Int>("max_block_height")
+                    val minTime = resultSet.get<Long>("min_time")
+                    val maxTime = resultSet.get<Long>("max_time")
+
                     val address = resultSet.get<String>("address")
                     val txCount = resultSet.get<Int>("tx_count")
 
@@ -252,7 +263,11 @@ fun getStatsByAddress(filter: SearchFilter): List<SwapStatsByAddress> {
                             inputAmount = round(amountFrom),
                             inputAmountUSD = round(amountSoldUSD),
                             outputAmount = round(amountTo),
-                            outputAmountUSD = round(amountBoughtUSD)
+                            outputAmountUSD = round(amountBoughtUSD),
+                            minBlockHeight = minBlockHeight,
+                            maxBlockHeight = maxBlockHeight,
+                            minTime = minTime,
+                            maxTime = maxTime,
                         )
                     )
                 }
@@ -568,6 +583,10 @@ data class SwapStatsByAddress(
     val inputAmountUSD: String,
     val outputAmount: String,
     val outputAmountUSD: String,
+    val minBlockHeight: Int,
+    val maxBlockHeight: Int,
+    val minTime: Long,
+    val maxTime: Long,
 ) : Comparable<SwapStats> {
     override fun compareTo(other: SwapStats): Int {
         return if (inputAmountUSD.toDouble() < other.inputAmountUSD) 1 else -1
