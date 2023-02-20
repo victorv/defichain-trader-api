@@ -108,7 +108,7 @@ private suspend fun indexBlock(dbTX: DBTX, zmqBatch: ZMQBatch) {
             masterNodeTX.tx.txID,
             masterNodeTX.type,
             masterNodeTX.fee,
-            masterNodeTX.size,
+            masterNodeTX.tx.vsize,
             isConfirmed = true,
             valid = true
         )
@@ -169,7 +169,7 @@ private suspend fun indexZMQPair(
     if (!whitelistedTXTypes.contains(customTX.type)) return
 
     val fee = calculateFee(tx, zmqBatch.txContext)
-    val txRowID = dbTX.insertTX(tx.txID, customTX.type, fee, tx.size, zmqPair.isConfirmed, customTX.valid)
+    val txRowID = dbTX.insertTX(tx.txID, customTX.type, fee, tx.vsize, zmqPair.isConfirmed, customTX.valid)
 
     if (rawTX != null) {
         dbTX.insertRawTX(txRowID, rawTX)

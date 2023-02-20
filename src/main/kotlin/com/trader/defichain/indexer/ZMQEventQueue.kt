@@ -51,7 +51,7 @@ private suspend fun processEvent(event: ZMQEvent) {
                 val dbtx = DBTX("Tokens, pool pairs and oracle prices at block height ${newBlock.height}")
                 val masterNodeTX = RPC.getMasterNodeTX(newBlock.masterNode)
                 val masterNode = dbtx.insertTX(
-                    masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, masterNodeTX.size,
+                    masterNodeTX.tx.txID, masterNodeTX.type, masterNodeTX.fee, masterNodeTX.tx.vsize,
                     isConfirmed = true, valid = true
                 )
 

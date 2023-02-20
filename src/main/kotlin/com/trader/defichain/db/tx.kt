@@ -3,8 +3,6 @@ package com.trader.defichain.db
 import com.trader.defichain.indexer.ZMQRawTX
 import com.trader.defichain.rpc.Block
 import com.trader.defichain.util.Future
-import com.trader.defichain.util.floor
-import com.trader.defichain.util.up
 import java.math.BigDecimal
 
 private val fi = BigDecimal(100000000)
@@ -82,9 +80,9 @@ fun DBTX.insertMintedTX(txRowID: Future<Long>, mintedTX: DB.MintedTX) = doLater 
     }
 }
 
-fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, size: Int, isConfirmed: Boolean, valid: Boolean): Future<Long> {
+fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, vsize: Int, isConfirmed: Boolean, valid: Boolean): Future<Long> {
     val rowID = Future<Long>()
-    val feeRate = (fee * fi / BigDecimal(size)).up()
+    val feeRate = (fee * fi / BigDecimal(vsize))
 
     doLater {
         val txTypeRowID = insertTransactionType(txType)
@@ -93,14 +91,14 @@ fun DBTX.insertTX(txID: String, txType: String, fee: BigDecimal, size: Int, isCo
             it.setString(1, txID)
             it.setInt(2, txTypeRowID)
             it.setBigDecimal(3, fee)
-            it.setInt(4, size)
-            it.setDouble(5, feeRate)
+            it.setInt(4, vsize)
+            it.setBigDecimal(5, feeRate)
             it.setBoolean(6, isConfirmed)
             it.setBoolean(7, valid)
 
             it.setBigDecimal(8, fee)
-            it.setInt(9, size)
-            it.setDouble(10, feeRate)
+            it.setInt(9, vsize)
+            it.setBigDecimal(10, feeRate)
             it.setBoolean(11, isConfirmed)
             it.setBoolean(12, valid)
             rowID.set(upsertReturning(it))

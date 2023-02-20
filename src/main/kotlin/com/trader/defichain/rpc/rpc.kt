@@ -97,7 +97,7 @@ class RPC {
                         txID = "placeholdertx",
                         vin = listOf(),
                         vout = listOf(),
-                        size = 100,
+                        vsize = 100,
                     ), BigDecimal(1.0)
                 )
             }

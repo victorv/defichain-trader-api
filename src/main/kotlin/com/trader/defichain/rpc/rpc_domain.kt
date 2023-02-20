@@ -80,7 +80,6 @@ data class Block(
 
 data class MasterNodeTX(val tx: TX, val fee: BigDecimal) {
     val type = "CreateMasterNode"
-    val size = tx.size
 }
 
 enum class RPCMethod(val id: String) {

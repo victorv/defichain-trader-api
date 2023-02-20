@@ -9,7 +9,7 @@ data class TX(
     val txID: String,
     val vin: List<Vin>,
     val vout: List<Vout>,
-    val size: Int,
+    val vsize: Int,
     var hex: String? = null,
 ) {
     var txn = -1
