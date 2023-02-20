@@ -56,7 +56,7 @@ fun DBTX.insertBlock(block: Block, masterNode: Future<Long>, finalized: Boolean)
 
         it.setLong(8, block.medianTime)
         it.setBoolean(9, finalized)
-        it.setBoolean(10, !finalized)
+        it.setBoolean(10, isBlockDirty)
         it.setLong(11, masterNode.get())
         it.setLong(12, minter)
         insertOrDoNothing(it)
