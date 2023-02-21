@@ -88,6 +88,7 @@ enum class RPCMethod(val id: String) {
     GET_BLOCK_COUNT("getblockcount"),
     LIST_POOL_PAIRS("listpoolpairs"),
     LIST_TOKENS("listtokens"),
+    GET_ACCOUNT("getaccount"),
     LIST_PRICES("listprices"),
     GET_BLOCK("getblock"),
     POOL_SWAP("poolswap"),

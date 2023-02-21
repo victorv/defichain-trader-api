@@ -8,6 +8,7 @@ import com.trader.defichain.dex.getCachedPoolPairs
 import com.trader.defichain.dex.getCachedTokens
 import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.http.*
+import com.trader.defichain.rpc.RPC
 import com.trader.defichain.telegram.notifications
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -112,6 +113,10 @@ fun Application.configureRouting() {
         get("/auctions") {
             val auctions = listAuctions()
             call.respond(auctions)
+        }
+        get("/account") {
+            val address = call.request.queryParameters["address"]!!
+            call.respond(RPC.getAccount(address))
         }
         post("/notification") {
             val uuid = call.request.queryParameters["uuid"]!!

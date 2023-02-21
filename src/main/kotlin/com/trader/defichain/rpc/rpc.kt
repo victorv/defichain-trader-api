@@ -129,6 +129,15 @@ class RPC {
             limit1000,
         ).entries.associate { it.key.toInt() to it.value }
 
+        suspend fun getAccount(address: String): Map<String, Double> = getValue<List<String>>(
+            RPCMethod.GET_ACCOUNT,
+            JsonPrimitive(address),
+            limit1000,
+        ).associate {
+            val (amount, token) = it.split("@")
+            token to amount.toDouble()
+        }
+
         suspend fun listPrices(): List<OraclePrice> = getValue(
             RPCMethod.LIST_PRICES,
             limit1000,
