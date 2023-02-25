@@ -33,6 +33,22 @@ data class PoolSwap(
 }
 
 @Serializable
+data class LimitOrder(
+    val amountFrom: Double,
+    val tokenFrom: String,
+    val tokenTo: String,
+    val maxPrice: Double,
+    val signedTX: String
+) {
+    fun asPoolSwap() = PoolSwap(
+        amountFrom = amountFrom * maxPrice,
+        tokenFrom = tokenFrom,
+        tokenTo = tokenTo,
+        desiredResult = amountFrom
+    )
+}
+
+@Serializable
 data class PoolSwapTestResponse(
     val path: String,
     val pools: List<String>,

@@ -7,6 +7,7 @@ import com.trader.defichain.config.rpcConfig
 import com.trader.defichain.config.zmqConfig
 import com.trader.defichain.dex.broadcastDEX
 import com.trader.defichain.dex.cachePoolPairs
+import com.trader.defichain.dex.testPoolSwap
 import com.trader.defichain.mempool.sendMempoolEvents
 import com.trader.defichain.plugins.configureContentNegotiation
 import com.trader.defichain.plugins.configureRouting
@@ -15,6 +16,7 @@ import com.trader.defichain.telegram.approveNewNotifications
 import com.trader.defichain.telegram.broadcastTelegramMessages
 import com.trader.defichain.telegram.loadNotifications
 import com.trader.defichain.telegram.notifyTelegramSubscribers
+import com.trader.defichain.wallet.broadcastOrderUpdates
 import com.trader.defichain.zmq.receiveFullNodeEvents
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -71,6 +73,10 @@ fun main(vararg args: String) {
 
     GlobalScope.launch(Dispatchers.IO) {
         receiveFullNodeEvents(ZContext(), coroutineContext)
+    }
+
+    GlobalScope.launch(Dispatchers.IO) {
+        broadcastOrderUpdates(coroutineContext)
     }
 
     if (appServerConfig.production) {

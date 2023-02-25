@@ -15,6 +15,7 @@ val connections: CopyOnWriteArrayList<Connection> = CopyOnWriteArrayList()
 
 class Connection {
 
+    var hasAddress = false
     var description: String? = null
     var filter: SearchFilter? = null
     val uuid = UUID.randomUUID().toString()

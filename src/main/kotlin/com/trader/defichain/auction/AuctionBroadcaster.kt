@@ -2,8 +2,6 @@ package com.trader.defichain.auction
 
 import com.trader.defichain.http.Message
 import com.trader.defichain.http.connections
-import com.trader.defichain.rpc.RPC
-import com.trader.defichain.rpc.RPCMethod
 import com.trader.defichain.zmq.newZQMBlockChannel
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.encodeToString

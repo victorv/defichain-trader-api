@@ -1,5 +1,6 @@
 package com.trader.defichain.http
 
+import com.trader.defichain.dex.LimitOrder
 import com.trader.defichain.dex.PoolSwap
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -45,4 +46,6 @@ data class Message(
     val data: JsonElement,
 ) {
     fun asPoolSwap() = Json.decodeFromJsonElement<PoolSwap>(data)
+
+    fun asLimitOrder() = Json.decodeFromJsonElement<LimitOrder>(data)
 }

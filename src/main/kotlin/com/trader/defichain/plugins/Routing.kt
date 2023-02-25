@@ -3,13 +3,12 @@ package com.trader.defichain.plugins
 import com.trader.defichain.appServerConfig
 import com.trader.defichain.auction.listAuctions
 import com.trader.defichain.db.search.*
-import com.trader.defichain.dex.PoolSwap
-import com.trader.defichain.dex.getCachedPoolPairs
-import com.trader.defichain.dex.getCachedTokens
-import com.trader.defichain.dex.testPoolSwap
+import com.trader.defichain.dex.*
 import com.trader.defichain.http.*
 import com.trader.defichain.rpc.RPC
 import com.trader.defichain.telegram.notifications
+import com.trader.defichain.wallet.addLimitOrder
+import com.trader.defichain.wallet.getOrders
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
@@ -47,33 +46,21 @@ fun Application.configureRouting() {
                     for (message in incoming) {
                         val message = Json.decodeFromString<Message>(message.data.decodeToString())
                         when (message.id) {
+                            "set-address" -> {
+                                connection.hasAddress = true
+                                connection.send(getOrders())
+                            }
+                            "unset-address" -> {
+                                connection.hasAddress = false
+                            }
                             "add-swap" -> {
                                 val swap = message.asPoolSwap()
 
-                                val swapResult = testPoolSwap(swap)
-                                val message = Message(
-                                    id = "swap-result",
-                                    data = Json.encodeToJsonElement(swapResult),
-                                )
-                                connection.send(Json.encodeToString(message))
-
-                                connection.poolSwaps.add(swap)
+                                addSwap(swap, connection)
                             }
                             "remove-swap" -> {
                                 val swap = message.asPoolSwap()
-                                val pendingRemoval = connection.poolSwaps.filter {
-                                    it.tokenFrom == swap.tokenFrom &&
-                                            it.tokenTo == swap.tokenTo &&
-                                            it.amountFrom == swap.amountFrom &&
-                                            it.desiredResult == swap.desiredResult
-                                }
-                                connection.poolSwaps.removeAll(pendingRemoval)
-
-                                val message = Message(
-                                    id = "swaps-removed",
-                                    data = Json.encodeToJsonElement(pendingRemoval)
-                                )
-                                connection.send(Json.encodeToString(message))
+                                removeSwap(connection, swap)
                             }
                         }
                     }
@@ -87,7 +74,20 @@ fun Application.configureRouting() {
                 connections -= connection
             }
         }
-
+        post("/submit-order") {
+            val order = call.receive<LimitOrder>()
+            println(order)
+            if(!addLimitOrder(order)) {
+                call.respond(HttpStatusCode.BadRequest)
+            }
+            val uuid = call.request.queryParameters["uuid"]
+            connections.find { it.uuid == uuid }?.send(getOrders())
+            call.respond(HttpStatusCode.OK)
+        }
+        post("/spendable") {
+            val unspent = call.receive<List<String>>()
+            call.respond(unspent)
+        }
         get("/status") {
             call.respond(HttpStatusCode.OK, "ok")
         }
@@ -216,6 +216,36 @@ fun Application.configureRouting() {
             call.respond(testResult)
         }
     }
+}
+
+private suspend fun removeSwap(
+    connection: Connection,
+    swap: PoolSwap
+) {
+    val pendingRemoval = connection.poolSwaps.filter {
+        it.tokenFrom == swap.tokenFrom &&
+                it.tokenTo == swap.tokenTo &&
+                it.amountFrom == swap.amountFrom &&
+                it.desiredResult == swap.desiredResult
+    }
+    connection.poolSwaps.removeAll(pendingRemoval)
+
+    val message = Message(
+        id = "swaps-removed",
+        data = Json.encodeToJsonElement(pendingRemoval)
+    )
+    connection.send(Json.encodeToString(message))
+}
+
+private suspend fun addSwap(swap: PoolSwap, connection: Connection) {
+    val swapResult = testPoolSwap(swap)
+    val message = Message(
+        id = "swap-result",
+        data = Json.encodeToJsonElement(swapResult),
+    )
+    connection.send(Json.encodeToString(message))
+
+    connection.poolSwaps.add(swap)
 }
 
 private fun setFilter(
